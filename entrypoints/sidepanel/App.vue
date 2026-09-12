@@ -30,8 +30,19 @@ import ChatPanel from '@/components/ChatPanel.vue';
 
 const settings = ref<Settings | null>(null);
 const reader = useReader();
-const { state, chat, chatSessions, activeChatId, chatBusy, chatStatus, playhead, renderableMarkdown, isBusy } =
-  reader;
+const {
+  state,
+  chat,
+  chatSessions,
+  activeChatId,
+  chatBusy,
+  chatStatus,
+  playhead,
+  renderableMarkdown,
+  isBusy,
+  stopNote,
+  stopChat,
+} = reader;
 
 const exportMsg = ref('');
 const exportErr = ref('');
@@ -178,10 +189,6 @@ async function startNote(): Promise<void> {
   await reader.runNote(settings.value);
 }
 
-function stop(): void {
-  reader.stop();
-}
-
 async function onSend(text: string, images: ChatImage[]): Promise<void> {
   if (!settings.value) return;
   await reader.sendChat(settings.value, text, images);
@@ -242,11 +249,13 @@ async function doExport(): Promise<void> {
   }
 }
 
+const isCopied = ref(false);
+
 async function copyMarkdown(): Promise<void> {
   try {
     await navigator.clipboard.writeText(state.value.markdown);
-    exportMsg.value = '已复制到剪贴板';
-    setTimeout(() => (exportMsg.value = ''), 2600);
+    isCopied.value = true;
+    setTimeout(() => (isCopied.value = false), 2000);
   } catch {
     exportErr.value = '复制失败，请手动选择文本';
   }
@@ -282,24 +291,44 @@ watch(
 
 <template>
   <div class="panel">
-    <!-- 顶栏 -->
-    <header class="bar">
-      <div class="bar__brand">
-        <img class="bar__mark" :src="browser.runtime.getURL('/icons/icon32.png')" alt="" />
-        <span class="bar__name">BiliLens</span>
+    <!-- 顶栏：品牌与微工具 -->
+    <header class="sp-header-dock">
+      <div class="sp-brand-row">
+        <div class="sp-brand-badge-group">
+          <span class="sp-monogram">B</span>
+          <span class="sp-product-title">BiliLens</span>
+        </div>
+        <div class="sp-tools-cluster">
+          <button
+            v-if="state.markdown"
+            class="sp-icon-button"
+            :class="{ 'success-flash': isCopied || exportMsg.length > 0 }"
+            :title="settings?.saveMode === 'obsidian' && settings?.obsidian.enabled ? '存入 Obsidian' : '复制 Markdown'"
+            @click="settings?.saveMode === 'obsidian' && settings?.obsidian.enabled ? doExport() : copyMarkdown()"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </button>
+          <button class="sp-icon-button" title="设置" aria-label="设置" @click="openOptions">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
-      <button class="bar__gear" title="设置" aria-label="设置" @click="openOptions">
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M8 10.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Zm0-1.2a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6Z"
-          />
-          <path
-            fill="currentColor"
-            d="M6.9 1.3h2.2l.3 1.5.9.4 1.4-.7 1.6 1.6-.7 1.4.4.9 1.5.3v2.2l-1.5.3-.4.9.7 1.4-1.6 1.6-1.4-.7-.9.4-.3 1.5H6.9l-.3-1.5-.9-.4-1.4.7-1.6-1.6.7-1.4-.4-.9-1.5-.3V5.7l1.5-.3.4-.9-.7-1.4 1.6-1.6 1.4.7.9-.4.3-1.5Zm1.7 1.4h-.4l-.2 1.1-.3.1-1.2.5-.3.1-.9-.5-.8.8.5.9-.1.3-.5 1.2-.1.3-1.1.2v.4l1.1.2.1.3.5 1.2.1.3-.5.9.8.8.9-.5.3.1 1.2.5.3.1.2 1.1h.4l.2-1.1.3-.1 1.2-.5.3-.1.9.5.8-.8-.5-.9.1-.3.5-1.2.1-.3 1.1-.2v-.4l-1.1-.2-.1-.3-.5-1.2-.1-.3.5-.9-.8-.8-.9.5-.3-.1-1.2-.5-.3-.1-.2-1.1Z"
-          />
-        </svg>
-      </button>
+
+      <!-- 视频锚点微卡片 -->
+      <VideoHeader
+        v-if="state.info"
+        :info="state.info"
+        :conclusion="state.conclusion"
+        :material-hint="materialHint"
+        :subtitle-count="state.subtitleCount"
+      />
     </header>
 
     <!-- 未配置模型 -->
@@ -328,80 +357,114 @@ watch(
 
     <!-- 主内容 -->
     <template v-else>
-      <VideoHeader
-        :info="state.info"
-        :conclusion="state.conclusion"
-        :material-hint="materialHint"
-        :subtitle-count="state.subtitleCount"
-      />
-
       <TabBar
         :tab="tab"
         :has-note="!!state.markdown"
         :has-chat="hasChat"
-        :busy="isBusy || chatBusy"
+        :note-busy="isBusy"
+        :chat-busy="chatBusy"
         @change="changeTab"
       />
 
-      <!-- ============ 目录 ============ -->
-      <template v-if="tab === 'note'">
-        <!-- 生成按钮独立一行：它是这个页唯一的主操作 -->
-        <div class="actbar">
-          <button v-if="!isBusy" class="btn btn--primary actbar__go" @click="startNote">
-            {{ state.markdown ? '重新生成' : '生成笔记' }}
+      <!-- 主视口内容容器 -->
+      <main class="panel__content">
+        <!-- ============ 目录 ============ -->
+        <div v-show="tab === 'note'" class="tab-pane tab-pane--note">
+          <!-- 正在生成状态条 -->
+          <div v-if="isBusy" class="note-generating-bar">
+            <span class="spinner" />
+            <span class="note-generating-status">{{ state.status || '正在生成精读笔记…' }}</span>
+          </div>
+
+          <!-- 错误 -->
+          <div v-if="state.phase === 'error'" class="notice notice--error">
+            <p class="notice__title">没能完成</p>
+            <p class="notice__body notice__body--wrap">{{ state.error }}</p>
+            <button class="btn" @click="startNote">重试</button>
+          </div>
+
+          <!-- 正文（含时间轴导轨） -->
+          <div v-if="state.markdown" class="body">
+            <NoteBody :html="renderedHtml" :streaming="isStreaming" @seek="onSeek" />
+          </div>
+
+          <!-- 待生成 -->
+          <PendingNote v-else-if="!isBusy && state.phase !== 'error'" />
+        </div>
+
+        <!-- ============ 聊天 ============ -->
+        <div v-show="tab === 'chat'" class="tab-pane tab-pane--chat">
+          <ChatPanel
+            :bubbles="chat"
+            :sessions="chatSessions"
+            :active-id="activeChatId"
+            :busy="chatBusy"
+            :status="chatStatus"
+            :send-playhead="settings?.sendPlayhead ?? false"
+            :playhead="playhead"
+            :ready="!configMissing"
+            @send="onSend"
+            @stop="stopChat"
+            @seek="onSeek"
+            @update:send-playhead="setSendPlayhead"
+            @clear="reader.clearChatHistory()"
+            @new="onNewChat"
+            @select="onSelectChat"
+            @remove="onRemoveChat"
+          />
+        </div>
+      </main>
+
+      <!-- 固定底舱容器（完全脱离内部滚动层与页面切换动画，杜绝任何位移与跳动） -->
+      <div v-if="tab === 'note'" class="sp-bottom-dock-container">
+        <div class="sp-dock-footer">
+          <button
+            v-if="!isBusy"
+            class="machined-btn-primary"
+            @click="startNote"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path v-if="state.markdown" d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              <polygon v-else points="5 3 19 12 5 21 5 3" />
+            </svg>
+            <span>{{ state.markdown ? '重新生成精读' : '生成精读笔记' }}</span>
           </button>
-          <button v-else class="btn actbar__go" @click="stop">停止</button>
-          <span v-if="isBusy" class="actbar__status">{{ state.status }}</span>
-        </div>
-
-        <!-- 错误 -->
-        <div v-if="state.phase === 'error'" class="notice notice--error">
-          <p class="notice__title">没能完成</p>
-          <p class="notice__body notice__body--wrap">{{ state.error }}</p>
-          <button class="btn" @click="startNote">重试</button>
-        </div>
-
-        <!-- 正文（含时间轴导轨） -->
-        <div v-if="state.markdown" class="body">
-          <NoteBody :html="renderedHtml" :streaming="isStreaming" @seek="onSeek" />
-        </div>
-
-        <!-- 待生成 -->
-        <PendingNote v-else-if="!isBusy && state.phase !== 'error'" />
-
-        <!-- 底部操作 -->
-        <footer v-if="state.markdown && !isBusy" class="acts">
-          <button class="btn btn--primary" @click="doExport">
-            {{
-              settings?.saveMode === 'obsidian' && settings?.obsidian.enabled
-                ? '存入 Obsidian'
-                : '下载 .md'
-            }}
+          <button
+            v-else
+            class="machined-btn-primary machined-btn-stop"
+            @click="stopNote"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            <span>停止生成</span>
           </button>
-          <button class="btn" @click="copyMarkdown">复制</button>
-        </footer>
-      </template>
 
-      <!-- ============ 聊天 ============ -->
-      <ChatPanel
-        v-else
-        :bubbles="chat"
-        :sessions="chatSessions"
-        :active-id="activeChatId"
-        :busy="chatBusy"
-        :status="chatStatus"
-        :send-playhead="settings?.sendPlayhead ?? false"
-        :playhead="playhead"
-        :ready="!configMissing"
-        @send="onSend"
-        @stop="stop"
-        @seek="onSeek"
-        @update:send-playhead="setSendPlayhead"
-        @clear="reader.clearChatHistory()"
-        @new="onNewChat"
-        @select="onSelectChat"
-        @remove="onRemoveChat"
-      />
+          <template v-if="state.markdown && !isBusy">
+            <button
+              v-if="settings?.saveMode === 'obsidian' && settings?.obsidian.enabled"
+              class="machined-btn-ghost"
+              @click="doExport"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+              <span>存入 Obsidian</span>
+            </button>
+            <button
+              class="machined-btn-ghost"
+              :class="{ 'is-copied': isCopied }"
+              @click="copyMarkdown"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <span>{{ isCopied ? '已复制' : '复制 MD' }}</span>
+            </button>
+          </template>
+        </div>
+      </div>
 
       <p v-if="exportMsg" class="toast toast--ok">{{ exportMsg }}</p>
       <p v-if="exportErr" class="toast toast--err">{{ exportErr }}</p>
@@ -414,54 +477,125 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding-bottom: 6px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.panel__content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  animation: paneFade 150ms var(--ease);
+}
+
+@keyframes paneFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tab-pane--note {
+  overflow-y: auto;
+}
+
+.tab-pane--chat {
+  height: 100%;
 }
 
 /* ---------------- 顶栏 ---------------- */
 
-.bar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
+.sp-header-dock {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--bg-panel);
+}
+
+.sp-brand-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 12px;
-  background: var(--paper);
-  border-bottom: 1px solid var(--line);
+  margin-bottom: 9px;
 }
 
-.bar__brand {
+.sp-brand-badge-group {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 
-.bar__mark {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
+.sp-monogram {
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  background: var(--bili);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.bar__name {
-  font-size: calc(13px * var(--fs));
-  font-weight: 660;
-  letter-spacing: -0.1px;
+.sp-product-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text-hero);
 }
 
-.bar__gear {
-  display: grid;
-  place-items: center;
+.sp-tools-cluster {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sp-icon-button {
   width: 26px;
   height: 26px;
   border-radius: var(--r-sm);
-  color: var(--ink-mist);
-  transition: background 0.14s, color 0.14s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--duration) var(--ease);
+  position: relative;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
 
-.bar__gear:hover {
-  background: var(--surface-sunken);
-  color: var(--ink);
+.sp-icon-button:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-hero);
+}
+
+.sp-icon-button.success-flash {
+  color: var(--ok);
+  background: var(--ok-wash);
+  animation: iconFlash 1.4s var(--ease);
+}
+
+@keyframes iconFlash {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.15);
+  }
 }
 
 /* ---------------- 提示块 ---------------- */
@@ -469,8 +603,9 @@ watch(
 .notice {
   margin: 11px 12px;
   padding: 12px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
 }
 
 .notice__title {
@@ -524,6 +659,7 @@ watch(
   background: var(--bili-wash);
   color: var(--bili);
   font-size: calc(15px * var(--fs));
+  border: 1px solid var(--bili-line);
 }
 
 .placeholder__title {
@@ -544,25 +680,24 @@ watch(
   font-size: calc(12.5px * var(--fs));
 }
 
-/* ---------------- 操作行 ---------------- */
+/* ---------------- 正在生成状态条 ---------------- */
 
-.actbar {
+.note-generating-bar {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--line);
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bili-wash);
+  border-bottom: 1px solid var(--bili-line);
+  color: var(--bili);
+  font-size: calc(12px * var(--fs));
+  font-weight: 550;
 }
 
-.actbar__go {
-  flex: 0 0 auto;
-}
-
-.actbar__status {
+.note-generating-status {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--ink-soft);
-  font-size: calc(12px * var(--fs));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -587,46 +722,119 @@ watch(
 
 .body {
   display: flex;
-  /* 布局限高后，笔记正文自己就是滚动区块 */
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 0 12px;
+  padding: 4px 12px 14px;
 }
 
-/* ---------------- 底部操作 ---------------- */
+/* ---------------- 固定底舱容器 ---------------- */
 
-.acts {
-  position: sticky;
-  bottom: 0;
+.sp-bottom-dock-container {
+  flex-shrink: 0;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border-hairline);
+  position: relative;
+  z-index: 10;
+}
+
+.sp-dock-footer {
+  padding: 10px 14px 12px;
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  margin-top: 14px;
-  background: var(--paper);
-  border-top: 1px solid var(--line);
 }
 
-/* ---------------- 按钮 ---------------- */
+.machined-btn-primary {
+  flex: 1;
+  height: 32px;
+  background: var(--bili);
+  color: #fff;
+  border-radius: var(--r-md);
+  font-size: calc(12.5px * var(--fs));
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: all var(--duration) var(--ease);
+  border: none;
+  cursor: pointer;
+}
+
+.machined-btn-primary:hover {
+  background: var(--bili-hover);
+  transform: translateY(-0.5px);
+}
+
+.machined-btn-primary:active {
+  transform: translateY(0);
+}
+
+.machined-btn-stop {
+  background: var(--bg-surface);
+  color: var(--text-hero);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-bevel);
+}
+
+.machined-btn-stop:hover {
+  background: var(--err-wash);
+  color: var(--err);
+  border-color: var(--err);
+}
+
+.machined-btn-ghost {
+  height: 32px;
+  padding: 0 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  font-size: calc(12px * var(--fs));
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: var(--shadow-bevel);
+  transition: all var(--duration) var(--ease);
+  cursor: pointer;
+}
+
+.machined-btn-ghost:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-hero);
+  border-color: var(--border-medium);
+}
+
+.machined-btn-ghost.is-copied {
+  color: var(--ok);
+  border-color: var(--ok);
+  background: var(--ok-wash);
+}
+
+/* ---------------- 基础按钮兼容 ---------------- */
 
 .btn {
-  padding: 7px 14px;
+  padding: 6px 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);
   font-size: calc(12.5px * var(--fs));
   font-weight: 530;
-  transition: background 0.14s, border-color 0.14s, transform 0.08s;
+  box-shadow: var(--shadow-card);
+  transition: all var(--duration) var(--ease);
 }
 
 .btn:hover {
-  background: var(--surface-sunken);
-  border-color: var(--ink-faint);
+  background: var(--surface-hover);
+  border-color: var(--ink-mist);
 }
 
 .btn:active {
-  transform: translateY(1px);
+  transform: translateY(0.5px);
 }
 
 .btn--primary {
@@ -634,11 +842,12 @@ watch(
   background: var(--bili);
   color: #fff;
   font-weight: 560;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .btn--primary:hover {
-  background: var(--bili-deep);
-  border-color: var(--bili-deep);
+  background: var(--bili-hover);
+  border-color: var(--bili-hover);
 }
 
 /* ---------------- toast ---------------- */

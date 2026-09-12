@@ -377,70 +377,108 @@ defineExpose({ focus: () => input.value?.focus() });
       </div>
     </div>
 
+    <!-- 播放位置感知吸顶条 -->
+    <div
+      class="playhead-sync-panel toggle"
+      :class="{ 'toggle--on': sendPlayhead }"
+      role="button"
+      :aria-pressed="sendPlayhead"
+      tabindex="0"
+      :title="
+        sendPlayhead
+          ? '发送时会带上当前播放位置，便于问「这里讲了什么」'
+          : '不附带播放位置。问整个视频的问题时更准确'
+      "
+      @click="emit('update:sendPlayhead', !sendPlayhead)"
+      @keydown.enter="emit('update:sendPlayhead', !sendPlayhead)"
+    >
+      <div class="sync-status-group">
+        <span class="sync-signal-dot" :class="{ 'sync-signal-dot--active': sendPlayhead }" />
+        <span class="toggle__label">附带当前播放位置</span>
+        <span class="sync-time-badge tnum">{{ playheadText }}</span>
+      </div>
+      <div class="tactile-switch" :class="{ active: sendPlayhead }">
+        <div class="tactile-knob toggle__box" />
+      </div>
+    </div>
+
     <!-- 消息区（外层是跳转按钮的定位容器） -->
     <div class="chat__wrap">
       <div ref="scroller" class="chat__scroll" @click="onClick" @scroll.passive="onScroll">
-      <!-- 空态：给几个起手式，避免用户对着空框发呆 -->
-      <div v-if="bubbles.length === 0" class="hello">
-        <p class="hello__title">问这个视频的任何问题</p>
-        <p class="hello__desc">
-          它读的是这个视频的完整字幕，回答里会带可点的时间戳。
-        </p>
-        <div class="hello__chips">
-          <button
-            v-for="s in SUGGESTIONS"
-            :key="s"
-            class="chip"
-            :disabled="busy || !ready"
-            @click="emit('send', s, [])"
-          >
-            {{ s }}
-          </button>
+        <!-- 空态：给几个起手式，避免用户对着空框发呆 -->
+        <div v-if="bubbles.length === 0" class="hello">
+          <p class="hello__title">问这个视频的任何问题</p>
+          <p class="hello__desc">
+            它读的是这个视频的完整字幕，回答里会带可点的时间戳。
+          </p>
+          <div class="hello__chips">
+            <button
+              v-for="s in SUGGESTIONS"
+              :key="s"
+              class="chip"
+              :disabled="busy || !ready"
+              @click="emit('send', s, [])"
+            >
+              {{ s }}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <!-- 消息列表 -->
-      <template v-else>
-        <div
-          v-for="(b, i) in bubbles"
-          :key="i"
-          class="msg"
-          :class="`msg--${b.role}`"
-        >
-          <div v-if="b.error" class="msg__error">{{ b.error }}</div>
-          <template v-else>
-            <!-- 思考过程：默认折叠，点开才看 -->
-            <div v-if="b.reasoning" class="think">
-              <button class="think__head" @click="toggleThink(i)">
-                <span class="think__arrow" :class="{ 'think__arrow--open': thinkOpen(i) }">
-                  ▸
-                </span>
-                {{ b.streaming && !b.content ? '思考中…' : '思考过程' }}
-              </button>
-              <div v-if="thinkOpen(i)" class="think__body">{{ b.reasoning }}</div>
-            </div>
-            <!-- 这一轮带的图：用户消息里直接显示缩略图 -->
-            <div v-if="b.images?.length" class="msg__imgs">
-              <img
-                v-for="(img, k) in b.images"
-                :key="k"
-                class="msg__img"
-                :src="img.dataURL"
-                :alt="`附图 ${k + 1}`"
-                @click="preview = img.dataURL"
-              />
-            </div>
-            <p v-else-if="b.imagesLost" class="msg__lost">（这一轮的图片已不再保留）</p>
-            <!-- eslint-disable-next-line vue/no-v-html -- 已在 markdown.ts 中转义 -->
-            <div class="msg__body md" v-html="htmlOf(b)" />
-            <div v-if="b.usage" class="msg__usage tnum">
-              输入 {{ fmtTokens(b.usage.promptTokens) }} · 输出
-              {{ fmtTokens(b.usage.completionTokens) }} tokens
-            </div>
-          </template>
-          <span v-if="b.streaming" class="caret" aria-hidden="true" />
-        </div>
-      </template>
+        <!-- 消息列表 -->
+        <template v-else>
+          <div
+            v-for="(b, i) in bubbles"
+            :key="i"
+            class="msg"
+            :class="`msg--${b.role}`"
+          >
+            <div v-if="b.error" class="msg__error">{{ b.error }}</div>
+            <template v-else>
+              <!-- 思考过程：默认折叠，点开才看 -->
+              <div v-if="b.reasoning" class="think">
+                <button
+                  class="think__head reasoning-accordion"
+                  :class="{ expanded: thinkOpen(i) }"
+                  @click="toggleThink(i)"
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    class="think__arrow"
+                    :class="{ 'think__arrow--open': thinkOpen(i) }"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  <span>{{ b.streaming && !b.content ? '思考中…' : (b.usage ? `已审阅字幕 · ${fmtTokens(b.usage.totalTokens)} tokens` : '思考过程') }}</span>
+                </button>
+                <div v-if="thinkOpen(i)" class="think__body reasoning-panel">{{ b.reasoning }}</div>
+              </div>
+              <!-- 这一轮带的图：用户消息里直接显示缩略图 -->
+              <div v-if="b.images?.length" class="msg__imgs">
+                <img
+                  v-for="(img, k) in b.images"
+                  :key="k"
+                  class="msg__img dialogue-user-image"
+                  :src="img.dataURL"
+                  :alt="`附图 ${k + 1}`"
+                  @click="preview = img.dataURL"
+                />
+              </div>
+              <p v-else-if="b.imagesLost" class="msg__lost">（这一轮的图片已不再保留）</p>
+              <!-- eslint-disable-next-line vue/no-v-html -- 已在 markdown.ts 中转义 -->
+              <div class="msg__body dialogue-assistant-body md" v-html="htmlOf(b)" />
+              <div v-if="b.usage" class="msg__usage tnum">
+                输入 {{ fmtTokens(b.usage.promptTokens) }} · 输出
+                {{ fmtTokens(b.usage.completionTokens) }} tokens
+              </div>
+            </template>
+            <span v-if="b.streaming" class="caret" aria-hidden="true" />
+          </div>
+        </template>
       </div>
     </div>
 
@@ -451,8 +489,8 @@ defineExpose({ focus: () => input.value?.focus() });
       <button class="chat__stop" @click="emit('stop')">停止</button>
     </div>
 
-    <!-- 输入区 -->
-    <div class="composer">
+    <!-- 聊天输入底舱（与目录底舱完全同构，保证切换 0 跳动） -->
+    <div class="sp-bottom-dock-container chat-input-dock composer">
       <!-- 快速跳转：锚在输入框上沿，只显示一个（↑/↓ 互斥） -->
       <button
         v-if="jumpMode === 'up'"
@@ -472,57 +510,50 @@ defineExpose({ focus: () => input.value?.focus() });
       </button>
 
       <!-- 待发送的图片 -->
-      <div v-if="attachments.length" class="attaches">
-        <div v-for="(img, i) in attachments" :key="i" class="attach">
+      <div v-if="attachments.length" class="image-drop-tray active attaches">
+        <div v-for="(img, i) in attachments" :key="i" class="image-thumb-unit attach">
           <img class="attach__img" :src="img.dataURL" :alt="`待发送附图 ${i + 1}`" />
-          <button class="attach__del" title="移除这张图" @click="removeAttachment(i)">×</button>
+          <button class="image-del-btn attach__del" title="移除这张图" @click="removeAttachment(i)">×</button>
         </div>
       </div>
 
       <p v-if="reading" class="composer__hint">正在处理图片…</p>
       <p v-else-if="pasteHint" class="composer__hint composer__hint--warn">{{ pasteHint }}</p>
 
-      <textarea
-        ref="input"
-        v-model="draft"
-        class="composer__input"
-        rows="1"
-        placeholder="问点什么…（Enter 发送，Shift+Enter 换行，可直接粘贴截图）"
-        :disabled="!ready"
-        @input="autoGrow"
-        @keydown="onKeydown"
-        @paste="onPaste"
-      />
-
-      <div class="composer__bar">
-        <!-- 播放位置开关：默认关，因为多数问题是关于整个视频的 -->
-        <button
-          class="toggle"
-          :class="{ 'toggle--on': sendPlayhead }"
+      <div class="machined-input-cell">
+        <textarea
+          ref="input"
+          v-model="draft"
+          class="chat-composer-area composer__input"
+          rows="1"
+          placeholder="针对本视频提问…（Enter 发送，Shift+Enter 换行，支持 Ctrl+V 粘贴截图）"
           :disabled="!ready"
-          :title="
-            sendPlayhead
-              ? '发送时会带上当前播放位置，便于问「这里讲了什么」'
-              : '不附带播放位置。问整个视频的问题时更准确'
-          "
-          :aria-pressed="sendPlayhead"
-          @click="emit('update:sendPlayhead', !sendPlayhead)"
-        >
-          <span class="toggle__box" aria-hidden="true" />
-          <span class="toggle__label tnum">播放位置 {{ playheadText }}</span>
-        </button>
+          @input="autoGrow"
+          @keydown="onKeydown"
+          @paste="onPaste"
+        />
 
-        <button v-if="bubbles.length > 0" class="composer__clear" @click="emit('clear')">
-          清空
-        </button>
-
-        <button
-          class="composer__send"
-          :disabled="busy || (!draft.trim() && attachments.length === 0) || !ready"
-          @click="submit"
-        >
-          发送
-        </button>
+        <div class="composer-toolbar">
+          <div class="composer-left-tools">
+            <button v-if="bubbles.length > 0" class="composer__clear" @click="emit('clear')">
+              清空
+            </button>
+          </div>
+          <div class="composer-right-tools">
+            <span class="composer-shortcut">Enter 发送</span>
+            <button
+              class="composer-send-btn composer__send"
+              :disabled="busy || (!draft.trim() && attachments.length === 0) || !ready"
+              title="发送消息"
+              @click="submit"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -561,24 +592,33 @@ defineExpose({ focus: () => input.value?.focus() });
 }
 
 .msg {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-size: calc(12.5px * var(--fs));
-  line-height: 1.72;
+  line-height: 1.7;
   word-break: break-word;
 }
 
-/* 用户消息：右对齐的浅底气泡，与助手回答区分开 */
+/* 用户消息：右对齐高质感珊瑚粉气泡 */
 .msg--user {
   margin-left: auto;
-  max-width: 88%;
-  padding: 7px 11px;
-  border-radius: var(--r-md);
-  background: var(--surface-sunken);
+  max-width: 86%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 2px 12px;
+  background: var(--bili);
+  color: #ffffff;
+  box-shadow: 0 2px 8px var(--bili-wash);
   white-space: pre-wrap;
 }
 
-/* 助手回答：不加气泡，让它读起来像正文而不是聊天记录 */
+.msg--user :deep(code) {
+  background: rgba(0, 0, 0, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* 助手回答：无气泡社论级直排正文 */
 .msg--assistant {
+  background: transparent;
   color: var(--ink);
 }
 
@@ -592,7 +632,7 @@ defineExpose({ focus: () => input.value?.focus() });
   flex: 0 0 auto;
   padding: 7px 12px;
   border-bottom: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--surface);
 }
 
 .sessbar__trigger {
@@ -604,19 +644,20 @@ defineExpose({ focus: () => input.value?.focus() });
   padding: 4px 8px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  background: var(--surface);
+  background: var(--surface-sunken);
   color: var(--ink-soft);
   font-size: calc(11.5px * var(--fs));
   text-align: left;
-  transition: border-color 0.14s;
+  transition: all var(--duration) var(--ease);
 }
 
 .sessbar__trigger:hover:not(:disabled) {
   border-color: var(--line-strong);
+  color: var(--ink);
 }
 
 .sessbar__trigger:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -632,7 +673,7 @@ defineExpose({ focus: () => input.value?.focus() });
   flex: 0 0 auto;
   color: var(--ink-mist);
   font-size: calc(9px * var(--fs));
-  transition: transform 0.16s;
+  transition: transform 0.16s var(--ease);
 }
 
 .sessbar__chev--open {
@@ -652,7 +693,7 @@ defineExpose({ focus: () => input.value?.focus() });
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
   background: var(--surface);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-pop);
 }
 
 .sesspop__row {
@@ -667,7 +708,7 @@ defineExpose({ focus: () => input.value?.focus() });
   color: var(--ink-soft);
   font-size: calc(12px * var(--fs));
   text-align: left;
-  transition: background 0.14s, color 0.14s;
+  transition: all var(--duration) var(--ease);
 }
 
 .sesspop__row:hover {
@@ -679,7 +720,8 @@ defineExpose({ focus: () => input.value?.focus() });
 .sesspop__row--cur,
 .sesspop__row--cur:hover {
   background: var(--bili-wash);
-  color: var(--bili-deep);
+  color: var(--bili);
+  font-weight: 600;
 }
 
 .sesspop__dot {
@@ -716,52 +758,61 @@ defineExpose({ focus: () => input.value?.focus() });
   height: 24px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  background: var(--surface);
+  background: var(--surface-sunken);
   color: var(--ink-soft);
   font-size: calc(13px * var(--fs));
   line-height: 1;
-  transition: border-color 0.14s, color 0.14s;
+  transition: all var(--duration) var(--ease);
 }
 
 .sessbar__btn:hover:not(:disabled) {
-  border-color: var(--bili);
-  color: var(--bili-deep);
+  border-color: var(--bili-line);
+  color: var(--bili);
+  background: var(--bili-wash);
 }
 
 .sessbar__btn--del:hover:not(:disabled) {
   border-color: var(--err);
   color: var(--err);
+  background: var(--err-wash);
 }
 
 .sessbar__btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* ---------------- 思考过程（默认折叠） ---------------- */
+/* ---------------- 思考过程（微折叠卡） ---------------- */
 
 .think {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .think__head {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 0;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
   color: var(--ink-mist);
   font-size: calc(11px * var(--fs));
-  transition: color 0.14s;
+  font-weight: 530;
+  transition: all var(--duration) var(--ease);
+  user-select: none;
 }
 
 .think__head:hover {
+  background: var(--surface-hover);
   color: var(--ink-soft);
+  border-color: var(--line-strong);
 }
 
 .think__arrow {
   display: inline-block;
   font-size: calc(10px * var(--fs));
-  transition: transform 0.16s;
+  transition: transform 0.16s var(--ease);
 }
 
 .think__arrow--open {
@@ -770,14 +821,15 @@ defineExpose({ focus: () => input.value?.focus() });
 
 .think__body {
   max-height: 220px;
-  margin-top: 4px;
-  padding: 7px 9px;
-  border-left: 2px solid var(--line-strong);
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
   background: var(--surface-sunken);
-  color: var(--ink-mist);
-  font-size: calc(11.5px * var(--fs));
-  line-height: 1.65;
+  color: var(--ink-soft);
+  font-family: var(--font-time);
+  font-size: calc(11px * var(--fs));
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-y: auto;
@@ -808,11 +860,12 @@ defineExpose({ focus: () => input.value?.focus() });
   border-radius: var(--r-sm);
   object-fit: cover;
   cursor: zoom-in;
-  transition: border-color 0.14s;
+  transition: all var(--duration) var(--ease);
 }
 
 .msg__img:hover {
   border-color: var(--bili);
+  transform: scale(1.03);
 }
 
 .msg__lost {
@@ -874,20 +927,27 @@ defineExpose({ focus: () => input.value?.focus() });
 
 /* 时间戳胶囊（聊天里是「引用」，点了跳转） */
 .msg :deep(.ts) {
-  display: inline-block;
-  margin: 0 1px;
-  padding: 0 5px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 1px 6px;
+  border-radius: 3px;
   background: var(--bili-wash);
-  color: var(--bili-deep);
+  border: 1px solid var(--bili-line);
+  color: var(--bili);
+  font-family: var(--font-time);
   font-size: calc(11px * var(--fs));
   font-weight: 600;
-  transition: background 0.14s, color 0.14s;
+  font-variant-numeric: tabular-nums;
+  transition: all var(--duration) var(--ease);
+  cursor: pointer;
 }
 
 .msg :deep(.ts:hover) {
   background: var(--bili);
   color: #fff;
+  border-color: var(--bili);
+  transform: translateY(-0.5px);
 }
 
 /* ---------------- 空态 ---------------- */
@@ -925,13 +985,13 @@ defineExpose({ focus: () => input.value?.focus() });
   color: var(--ink-soft);
   font-size: calc(12px * var(--fs));
   text-align: left;
-  transition: background 0.14s, border-color 0.14s, color 0.14s;
+  transition: all var(--duration) var(--ease);
 }
 
 .chip:hover:not(:disabled) {
   border-color: var(--bili-line);
   background: var(--bili-wash);
-  color: var(--bili-deep);
+  color: var(--bili);
 }
 
 .chip:disabled {
@@ -966,6 +1026,7 @@ defineExpose({ focus: () => input.value?.focus() });
   background: var(--surface);
   color: var(--ink-soft);
   font-size: calc(11.5px * var(--fs));
+  transition: all var(--duration) var(--ease);
 }
 
 .chat__stop:hover {
@@ -973,87 +1034,185 @@ defineExpose({ focus: () => input.value?.focus() });
   color: var(--ink);
 }
 
-/* ---------------- 输入区 ---------------- */
+/* ---------------- 播放感知吸顶条 ---------------- */
 
-.composer {
-  position: relative; /* 跳转按钮的定位基准 */
-  padding: 8px 12px 10px;
-  border-top: 1px solid var(--line);
-  background: var(--paper);
+.playhead-sync-panel {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-hairline);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow-bevel);
+  user-select: none;
+  cursor: pointer;
+  transition: background var(--duration) var(--ease);
+}
+
+.playhead-sync-panel:hover {
+  background: var(--bg-surface-hover);
+}
+
+.sync-status-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: calc(11.5px * var(--fs));
+  color: var(--text-secondary);
+}
+
+.sync-signal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-medium);
+  transition: all var(--duration) var(--ease);
+}
+
+.sync-signal-dot--active {
+  background: var(--ok);
+  box-shadow: 0 0 0 2px var(--ok-wash);
+}
+
+.sync-time-badge {
+  font-family: var(--font-time);
+  font-size: calc(11px * var(--fs));
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-hairline);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  transition: all var(--duration) var(--ease);
+}
+
+.toggle--on .sync-time-badge {
+  color: var(--bili);
+  background: var(--bili-wash);
+  border-color: var(--bili-line);
+}
+
+/* 微触感拨动开关 */
+.tactile-switch {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  background: var(--border-medium);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 160ms var(--ease);
+}
+
+.tactile-switch.active {
+  background: var(--bili);
+}
+
+.tactile-knob {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 160ms var(--ease);
+}
+
+.tactile-switch.active .tactile-knob {
+  transform: translateX(13px);
+}
+
+.toggle__label {
+  white-space: nowrap;
+}
+
+/* ---------------- 底部输入舱 ---------------- */
+
+.sp-bottom-dock-container {
+  flex-shrink: 0;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border-hairline);
+  position: relative;
+  z-index: 10;
+}
+
+.chat-input-dock {
+  padding: 10px 14px 12px;
 }
 
 /* 快速跳转：浮在输入框上沿的右侧，不占布局空间 */
 .jumpbar__btn {
   position: absolute;
-  right: 12px;
-  bottom: calc(100% + 6px);
+  right: 14px;
+  bottom: calc(100% + 8px);
   z-index: 20;
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--border-subtle);
   border-radius: 50%;
-  background: var(--surface);
-  color: var(--ink-soft);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
   font-size: calc(13px * var(--fs));
   line-height: 1;
-  box-shadow: var(--shadow-1);
-  transition: border-color 0.14s, color 0.14s;
+  box-shadow: var(--shadow-card);
+  transition: all var(--duration) var(--ease);
+  cursor: pointer;
 }
 
 .jumpbar__btn:hover {
   border-color: var(--bili);
-  color: var(--bili-deep);
+  color: var(--bili);
+  transform: scale(1.08);
 }
 
 /* 待发送的缩略图 */
-.attaches {
+.image-drop-tray {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-bottom: 7px;
 }
 
-.attach {
+.image-thumb-unit {
   position: relative;
-  width: 54px;
-  height: 54px;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-medium);
 }
 
 .attach__img {
   width: 100%;
   height: 100%;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
   object-fit: cover;
 }
 
-.attach__del {
+.image-del-btn {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: 1px;
+  right: 1px;
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--line-strong);
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: calc(12px * var(--fs));
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 9px;
   line-height: 1;
-  box-shadow: var(--shadow-1);
-}
-
-.attach__del:hover {
-  border-color: var(--err);
-  color: var(--err);
+  border: none;
+  cursor: pointer;
 }
 
 .composer__hint {
   margin: 0 0 6px;
-  color: var(--ink-mist);
+  color: var(--text-muted);
   font-size: calc(11.5px * var(--fs));
 }
 
@@ -1061,116 +1220,144 @@ defineExpose({ focus: () => input.value?.focus() });
   color: var(--warn);
 }
 
-.composer__input {
+.machined-input-cell {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-bevel);
+  transition: border-color var(--duration) var(--ease);
+}
+
+.machined-input-cell:focus-within {
+  border-color: var(--bili);
+}
+
+.chat-composer-area {
   display: block;
   width: 100%;
   max-height: 140px;
-  padding: 8px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--ink);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-hero);
   font-size: calc(12.5px * var(--fs));
-  line-height: 1.6;
+  line-height: 1.5;
   resize: none;
-  overflow-y: auto;
-  transition: border-color 0.14s;
-}
-
-.composer__input:focus {
-  border-color: var(--bili);
   outline: none;
+  overflow-y: auto;
 }
 
-.composer__input:disabled {
-  background: var(--surface-sunken);
+.chat-composer-area::placeholder {
+  color: var(--text-muted);
+}
+
+.chat-composer-area:disabled {
   cursor: not-allowed;
 }
 
-.composer__bar {
+.composer-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 7px;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-hairline);
 }
 
-/* 播放位置开关 */
-.toggle {
+.composer-left-tools {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px 3px 6px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-mist);
-  font-size: calc(11px * var(--fs));
-  transition: background 0.14s, border-color 0.14s, color 0.14s;
-}
-
-.toggle:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  color: var(--ink-soft);
-}
-
-.toggle--on {
-  border-color: var(--bili-line);
-  background: var(--bili-wash);
-  color: var(--bili-deep);
-}
-
-.toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.toggle__box {
-  width: 9px;
-  height: 9px;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-  transition: background 0.14s;
-}
-
-.toggle--on .toggle__box {
-  background: var(--bili);
-  border-color: var(--bili);
-}
-
-.toggle__label {
-  white-space: nowrap;
 }
 
 .composer__clear {
-  margin-left: auto;
-  padding: 4px 8px;
-  color: var(--ink-mist);
-  font-size: calc(11.5px * var(--fs));
+  padding: 2px 6px;
+  color: var(--text-muted);
+  font-size: calc(11px * var(--fs));
+  transition: color var(--duration) var(--ease);
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
 
 .composer__clear:hover {
-  color: var(--ink-soft);
+  color: var(--text-hero);
 }
 
-.composer__send {
-  padding: 5px 15px;
-  border: 1px solid var(--bili);
-  border-radius: var(--r-sm);
+.composer-right-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-shortcut {
+  font-size: calc(10.5px * var(--fs));
+  color: var(--text-muted);
+}
+
+.composer-send-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   background: var(--bili);
   color: #fff;
-  font-size: calc(12.5px * var(--fs));
-  font-weight: 560;
-  transition: background 0.14s, border-color 0.14s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration) var(--ease);
+  border: none;
+  cursor: pointer;
 }
 
-.composer__send:hover:not(:disabled) {
-  background: var(--bili-deep);
-  border-color: var(--bili-deep);
+.composer-send-btn:hover:not(:disabled) {
+  background: var(--bili-hover);
+  transform: translateY(-0.5px);
 }
 
-.composer__send:disabled {
+.composer-send-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.composer-send-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* 思考过程折叠条 */
+.reasoning-accordion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: calc(11px * var(--fs));
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  margin-bottom: 8px;
+  cursor: pointer;
+  user-select: none;
+  width: fit-content;
+  transition: all var(--duration) var(--ease);
+}
+
+.reasoning-accordion:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-medium);
+}
+
+.reasoning-panel {
+  font-family: var(--font-mono);
+  font-size: calc(11px * var(--fs));
+  color: var(--text-muted);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-sm);
+  padding: 7px 9px;
+  margin-bottom: 8px;
+  line-height: 1.45;
 }
 
 /* ---------------- 生成中光标 ---------------- */

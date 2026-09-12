@@ -17,8 +17,12 @@ const props = defineProps<{
   hasNote: boolean;
   /** 聊天是否已有对话 */
   hasChat: boolean;
-  /** 生成中：禁用切换，避免打断 */
-  busy: boolean;
+  /** 目录是否正在生成（非阻塞） */
+  noteBusy?: boolean;
+  /** 聊天是否正在生成（非阻塞） */
+  chatBusy?: boolean;
+  /** 兼容旧属性（不再阻断切换） */
+  busy?: boolean;
 }>();
 
 const emit = defineEmits<{ change: [tab: PanelTab] }>();
@@ -31,23 +35,36 @@ const TABS: ReadonlyArray<{ id: PanelTab; label: string; hint: string }> = [
 function has(tab: PanelTab): boolean {
   return tab === 'note' ? props.hasNote : props.hasChat;
 }
+
+function isTabBusy(tab: PanelTab): boolean {
+  return tab === 'note' ? !!props.noteBusy : !!props.chatBusy;
+}
 </script>
 
 <template>
-  <div class="tb" role="tablist">
+  <div class="tb machined-segmented" role="tablist">
+    <div
+      class="machined-slider"
+      :style="{ transform: tab === 'chat' ? 'translateX(100%)' : 'translateX(0)' }"
+      aria-hidden="true"
+    />
     <button
       v-for="t in TABS"
       :key="t.id"
-      class="tb__item"
-      :class="{ 'tb__item--on': tab === t.id }"
+      class="tb__item machined-tab-btn"
+      :class="{ 'tb__item--on': tab === t.id, active: tab === t.id }"
       :title="t.hint"
-      :disabled="busy"
       role="tab"
       :aria-selected="tab === t.id"
       @click="emit('change', t.id)"
     >
       {{ t.label }}
-      <span v-if="has(t.id)" class="tb__dot" aria-hidden="true" />
+      <span
+        v-if="has(t.id) || isTabBusy(t.id)"
+        class="tb__dot"
+        :class="{ 'tb__dot--busy': isTabBusy(t.id) }"
+        aria-hidden="true"
+      />
     </button>
   </div>
 </template>
@@ -55,44 +72,92 @@ function has(tab: PanelTab): boolean {
 <style scoped>
 .tb {
   display: flex;
-  gap: 18px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--line);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  padding: 2px;
+  position: relative;
+  box-shadow: var(--shadow-sunken);
+  margin: 8px 14px 0;
+}
+
+.machined-slider {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  box-shadow: var(--shadow-bevel), var(--shadow-card);
+  transition: transform 220ms var(--ease);
+  z-index: 1;
 }
 
 .tb__item {
+  flex: 1;
+  height: 27px;
+  font-size: calc(12px * var(--fs));
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   position: relative;
-  padding: 9px 1px 8px;
-  border-bottom: 2px solid transparent;
-  color: var(--ink-mist);
-  font-size: calc(13px * var(--fs));
-  font-weight: 560;
-  transition: color 0.14s, border-color 0.14s;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  transition: color var(--duration) var(--ease);
+  user-select: none;
+  cursor: pointer;
 }
 
 .tb__item:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text-hero);
 }
 
-/* 选中：文字变深 + 下划线。粉色只留给「当前状态」，符合设计规范 */
 .tb__item--on {
-  border-bottom-color: var(--bili);
-  color: var(--ink);
-  font-weight: 660;
+  color: var(--text-hero);
+  font-weight: 600;
 }
 
 .tb__item:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
+/* 状态指示小核：保持无文本以防破坏客观断言 */
 .tb__dot {
-  position: absolute;
-  top: 9px;
-  right: -7px;
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--bili);
+  box-shadow: 0 0 0 1.5px var(--bili-wash);
+  flex-shrink: 0;
+}
+
+.tb__item--on .tb__dot {
+  background: var(--bili);
+  box-shadow: 0 0 6px var(--bili-glow);
+}
+
+/* 后台正在生成时的微光呼吸动画 */
+.tb__dot--busy {
+  animation: tb-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.55);
+    opacity: 1;
+    box-shadow: 0 0 8px var(--bili-glow);
+  }
 }
 </style>

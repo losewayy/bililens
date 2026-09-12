@@ -33,10 +33,40 @@ const props = defineProps<{
 const emit = defineEmits<{ seek: [seconds: number] }>();
 
 const root = ref<HTMLElement | null>(null);
+const fillHeight = ref('0px');
 let observer: IntersectionObserver | null = null;
 
 /** 记录各章节的可见状态 */
 const visible = new Set<string>();
+
+function updateChapterStates(currentId: string | undefined): void {
+  const el = root.value;
+  if (!el) return;
+  const heads = Array.from(el.querySelectorAll<HTMLElement>('h3.rail'));
+  let found = false;
+  for (const h of heads) {
+    if (h.id === currentId) {
+      h.classList.add('is-active');
+      h.classList.remove('is-visited');
+      found = true;
+    } else if (!found && currentId) {
+      h.classList.remove('is-active');
+      h.classList.add('is-visited');
+    } else {
+      h.classList.remove('is-active');
+      h.classList.remove('is-visited');
+    }
+  }
+
+  const active = el.querySelector<HTMLElement>('h3.rail.is-active');
+  if (active) {
+    const top = active.offsetTop;
+    const h = active.offsetHeight;
+    fillHeight.value = `${Math.max(0, top + h / 2)}px`;
+  } else {
+    fillHeight.value = '0px';
+  }
+}
 
 /** 重建滚动监听：html 变化（流式增量、切换视频）时章节集合会变 */
 function setupSpy(): void {
@@ -48,7 +78,10 @@ function setupSpy(): void {
   if (!el) return;
 
   const heads = Array.from(el.querySelectorAll<HTMLElement>('h3.rail'));
-  if (heads.length === 0) return;
+  if (heads.length === 0) {
+    fillHeight.value = '0px';
+    return;
+  }
 
   const order = heads.map((h) => h.id);
 
@@ -61,12 +94,8 @@ function setupSpy(): void {
       }
 
       // 取文档顺序中最靠前的可见章节作为「当前」
-      const current = order.find((id) => visible.has(id));
-      if (!current) return;
-
-      for (const h of heads) {
-        h.classList.toggle('is-active', h.id === current);
-      }
+      const current = order.find((id) => visible.has(id)) ?? order[0];
+      updateChapterStates(current);
     },
     {
       // 顶部让开 sticky 顶栏；底部收窄，使高亮偏向「刚开始读」的那一节
@@ -76,6 +105,8 @@ function setupSpy(): void {
   );
 
   for (const h of heads) observer.observe(h);
+  // 初始化默认状态
+  updateChapterStates(order[0]);
 }
 
 /*
@@ -116,10 +147,8 @@ function onClick(ev: MouseEvent): void {
 
   // 立即点亮所点章节，不等滚动结束——避免「点了没反应」的错觉
   const head = hit.closest('h3.rail') as HTMLElement | null;
-  if (head && root.value) {
-    for (const h of root.value.querySelectorAll('h3.rail')) {
-      h.classList.toggle('is-active', h === head);
-    }
+  if (head) {
+    updateChapterStates(head.id);
   }
 
   emit('seek', sec);
@@ -128,6 +157,7 @@ function onClick(ev: MouseEvent): void {
 
 <template>
   <article ref="root" class="note" :class="{ 'note--streaming': props.streaming }" @click="onClick">
+    <div class="timeline-spine-fill" :style="{ height: fillHeight }" aria-hidden="true" />
     <!-- eslint-disable-next-line vue/no-v-html -- 内容已在 markdown.ts 中做过转义 -->
     <div class="note__inner md" v-html="props.html" />
     <span v-if="props.streaming" class="caret" aria-hidden="true" />
@@ -136,138 +166,230 @@ function onClick(ev: MouseEvent): void {
 
 <style scoped>
 /* ================================================================== *
- * 导轨布局
+ * 精密社论时序导轨布局 (Precision Editorial Timeline)
  *
- * .note 负责左侧留白与那条竖线；h3.rail 反向抵消留白，
- * 使节点能精确落在线上，而标题文字仍与正文左边缘对齐。
+ * .note 负责左侧留白与中轴轨道；h3.rail 形成卡片式锁定锚点，
+ * 使节点能精确落在线上，而标题文字与正文左边缘保持严谨对齐。
  * ================================================================== */
 
 .note {
   position: relative;
   flex: 1;
   min-width: 0;
-  padding-left: 46px;
+  padding-left: 34px;
   word-break: break-word;
 }
 
-/* 竖线本体：两端渐隐，避免生硬截断 */
+/* 贯穿式精密中轴轨道：微凹沉静槽 */
 .note::before {
   content: '';
   position: absolute;
-  left: 12px;
-  top: 0;
-  bottom: 0;
+  left: 11px;
+  top: 12px;
+  bottom: 16px;
   width: 2px;
   border-radius: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0,
-    var(--line-strong) 52px,
-    var(--line-strong) calc(100% - 52px),
-    transparent 100%
-  );
+  background: var(--rail-spine, var(--line));
   pointer-events: none;
+  z-index: 0;
+}
+
+/* 动态填充的平滑进度线：自顶部延伸至当前激活节点中心 */
+.timeline-spine-fill {
+  position: absolute;
+  left: 11px;
+  top: 12px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, var(--bili) 0%, var(--rail-filled, rgba(251, 114, 153, 0.75)) 100%);
+  pointer-events: none;
+  z-index: 1;
+  transition: height 240ms var(--ease);
 }
 
 .note__inner {
   display: contents;
 }
 
-/* ---------------- 章节标题 = 刻度节点 ---------------- */
+/* ---------------- 章节标题 = 卡片式刻度节点 ---------------- */
 
 .note :deep(h3.rail) {
   position: relative;
-  margin: 22px 0 10px;
-  margin-left: -46px;
-  padding-left: 46px;
-  font-size: calc(13.5px * var(--fs));
-  font-weight: 640;
-  line-height: 1.5;
+  margin: 16px 0 8px;
+  margin-left: -34px;
+  padding: 6px 10px 6px 34px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  border-left: 2.5px solid transparent;
+  font-size: calc(13px * var(--fs));
+  font-weight: 620;
+  line-height: 1.45;
   color: var(--ink);
   scroll-margin-top: 58px;
+  transition: all var(--duration) var(--ease);
+  cursor: pointer;
 }
 
 .note :deep(h3.rail:first-child) {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
-/* 空心节点，精确落在竖线上：
-   竖线 left:12px + width:2px → 中心 13px
-   节点 left:8px + width:10px → 中心 13px  ✓ */
-.note :deep(.rail__node) {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  margin-top: -5px;
-  padding: 0;
-  border: 2px solid var(--line-strong);
-  border-radius: 50%;
-  background: var(--paper);
-  transition: border-color 0.16s, background 0.16s, transform 0.16s, box-shadow 0.16s;
+.note :deep(h3.rail:hover) {
+  background: var(--surface-hover);
+  border-color: var(--line);
 }
 
-.note :deep(.rail__node:hover) {
-  border-color: var(--bili);
-  background: var(--bili-wash);
-  transform: scale(1.3);
-}
-
-/* --- 当前阅读位置：实心粉点 + 光晕 --- */
-.note :deep(h3.rail.is-active .rail__node) {
-  border-color: var(--bili);
-  background: var(--bili);
-  transform: scale(1.15);
-  box-shadow: 0 0 0 4px var(--bili-wash);
-}
-
+/* 当前激活章节：珊瑚粉左锁边 + 微渐变底色 */
 .note :deep(h3.rail.is-active) {
+  background: linear-gradient(90deg, var(--bili-wash) 0%, var(--surface) 55%);
+  border-color: var(--line);
+  border-left: 2.5px solid var(--bili);
+  box-shadow: var(--shadow-card);
   color: var(--ink);
   font-weight: 680;
 }
 
-/* 时间刻度：等宽数字，节点之后、标题之前 */
-.note :deep(.rail__time) {
-  display: inline-block;
-  margin-right: 9px;
-  padding: 1px 7px;
-  border: 1px solid var(--bili-line);
-  border-radius: 5px;
+/* 播放中指示徽章 */
+.note :deep(h3.rail.is-active)::after {
+  content: '▶ 播放中';
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--bili);
   background: var(--bili-wash);
-  color: var(--bili-deep);
-  font-size: calc(11px * var(--fs));
-  font-weight: 650;
-  line-height: 1.55;
-  letter-spacing: 0.2px;
-  vertical-align: 1px;
-  transition: background 0.16s, color 0.16s, border-color 0.16s;
+  border: 1px solid var(--bili-line);
+  padding: 0 5px;
+  border-radius: 3px;
+  line-height: 15px;
+  letter-spacing: 0.4px;
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
-.note :deep(.rail__time:hover) {
+/* 多态微引脚：未激活状态（静止中空微圆核，中轴 X=12px） */
+.note :deep(.rail__node) {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  padding: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--paper);
+  transition: all var(--duration) var(--ease);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.note :deep(.rail__node:hover) {
+  border-color: var(--ink-soft);
+  background: var(--surface-sunken);
+  transform: scale(1.3);
+}
+
+/* 已播放历史章节：实心珊瑚粉核 */
+.note :deep(h3.rail.is-visited .rail__node) {
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border: 1.5px solid var(--bili);
   background: var(--bili);
-  border-color: var(--bili);
-  color: #fff;
+  opacity: 0.65;
+}
+
+/* 当前激活章节：17px 呼吸光晕微孔圈 + 内嵌矢量播放三角符文 */
+.note :deep(h3.rail.is-active .rail__node) {
+  width: 17px;
+  height: 17px;
+  left: 3.5px;
+  margin-top: -8.5px;
+  border: 1.5px solid var(--bili);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px var(--bili-wash), 0 0 8px var(--bili-glow);
+  animation: precisionPulse 2.8s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  color: var(--bili);
+  opacity: 1;
+}
+
+.note :deep(h3.rail.is-active .rail__node)::after {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 5px solid var(--bili);
+  margin-left: 1.5px;
+}
+
+@keyframes precisionPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px var(--bili-wash), 0 0 8px rgba(251, 114, 153, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(251, 114, 153, 0.18), 0 0 12px rgba(251, 114, 153, 0.35);
+  }
+}
+
+/* 时间刻度：精密等宽芯片 */
+.note :deep(.rail__time) {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface-sunken);
+  color: var(--ink-mist);
+  font-family: var(--font-time);
+  font-size: calc(11px * var(--fs));
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  letter-spacing: 0.2px;
+  vertical-align: 0;
+  transition: all var(--duration) var(--ease);
+}
+
+.note :deep(h3.rail:hover .rail__time) {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.note :deep(h3.rail.is-active .rail__time) {
+  color: var(--bili);
+  background: var(--bili-wash);
+  border-color: var(--bili-line);
 }
 
 /* ---------------- 正文内的时间戳（低调） ---------------- */
 
 .note :deep(.ts) {
   display: inline-block;
-  margin: 0 1px;
+  margin: 0 2px;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--bili-wash);
+  border: 1px solid var(--bili-line);
   color: var(--bili-deep);
+  font-family: var(--font-time);
   font-size: calc(11px * var(--fs));
   font-weight: 600;
-  line-height: 1.7;
-  transition: background 0.14s, color 0.14s;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  transition: all var(--duration) var(--ease);
+  cursor: pointer;
 }
 
 .note :deep(.ts:hover) {
   background: var(--bili);
   color: #fff;
+  border-color: var(--bili);
 }
 
 /* ---------------- 标题层级 ---------------- */
@@ -279,16 +401,53 @@ function onClick(ev: MouseEvent): void {
   letter-spacing: -0.2px;
 }
 
-.note :deep(h2) {
-  margin: 20px 0 10px;
-  font-size: calc(14px * var(--fs));
-  font-weight: 670;
-  letter-spacing: -0.1px;
-  color: var(--ink);
+/* 核心摘要卡片化 (Executive Card) */
+.note :deep(h2:first-of-type) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0 -34px;
+  padding: 10px 14px 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  box-shadow: var(--shadow-bevel);
 }
 
-.note :deep(h2:first-child) {
-  margin-top: 2px;
+.note :deep(h2:first-of-type)::before {
+  content: 'EXECUTIVE SUMMARY ·';
+  font-size: 10px;
+  color: var(--bili);
+  font-weight: 800;
+}
+
+.note :deep(h2:first-of-type + p) {
+  margin: 0 0 18px -34px;
+  padding: 0 14px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.64;
+  box-shadow: var(--shadow-card);
+}
+
+.note :deep(h2:not(:first-of-type)) {
+  margin: 22px 0 10px -34px;
+  padding: 4px 12px;
+  font-size: calc(13px * var(--fs));
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  color: var(--text-hero);
+  border-left: 2.5px solid var(--border-medium);
 }
 
 .note :deep(h4),
@@ -309,23 +468,34 @@ function onClick(ev: MouseEvent): void {
 
 .note :deep(ul),
 .note :deep(ol) {
-  margin: 7px 0;
-  padding-left: 20px;
+  margin: 6px 0 12px;
+  padding-left: 0;
+  list-style: none;
 }
 
 .note :deep(li) {
-  margin: 5px 0;
-  line-height: 1.75;
+  position: relative;
+  margin: 6px 0;
+  padding-left: 14px;
+  font-size: 12px;
+  line-height: 1.62;
+  color: var(--text-secondary);
+}
+
+.note :deep(li)::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  width: 4px;
+  height: 1.5px;
+  background: var(--border-medium);
+  border-radius: 1px;
 }
 
 .note :deep(li.sub) {
   margin-left: 12px;
-  list-style-type: circle;
-  color: var(--ink-soft);
-}
-
-.note :deep(li::marker) {
-  color: var(--bili);
+  color: var(--text-muted);
 }
 
 /* ---------------- 引用 ---------------- */

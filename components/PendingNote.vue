@@ -10,10 +10,18 @@
 
 <template>
   <div class="pending">
-    <span class="pending__glyph" aria-hidden="true">✎</span>
-    <p class="pending__title">还没有生成笔记</p>
+    <div class="pending__beacon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <line x1="10" y1="9" x2="8" y2="9" />
+      </svg>
+    </div>
+    <p class="pending__title">尚未生成精读笔记</p>
     <p class="pending__desc">
-      点上方「生成笔记」开始。想直接提问的话，切到「聊天」——它同样能读到这个视频的字幕。
+      点下方「生成精读笔记」即可提炼核心要点与时序导轨。想直接追问，可切到「聊天」边看边问。
     </p>
   </div>
 </template>
@@ -25,34 +33,37 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 40px 30px 52px;
+  gap: 7px;
+  padding: 48px 28px;
   text-align: center;
 }
 
-.pending__glyph {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  margin-bottom: 3px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 50%;
-  color: var(--ink-mist);
-  font-size: calc(15px * var(--fs));
+.pending__beacon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 4px;
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  color: var(--bili);
+  box-shadow: var(--shadow-sunken);
 }
 
 .pending__title {
   margin: 0;
   font-size: calc(13px * var(--fs));
-  font-weight: 620;
+  font-weight: 650;
+  color: var(--text-hero);
 }
 
 .pending__desc {
   margin: 0;
-  max-width: 30em;
-  color: var(--ink-soft);
-  font-size: calc(12.5px * var(--fs));
-  line-height: 1.7;
+  max-width: 28em;
+  color: var(--text-muted);
+  font-size: calc(12px * var(--fs));
+  line-height: 1.65;
 }
 </style>

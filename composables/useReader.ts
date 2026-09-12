@@ -127,7 +127,9 @@ export function useReader() {
   /** 当前视频的播放位置（秒），由 UI 定时刷新 */
   const playhead = shallowRef<number | null>(null);
 
-  let controller: AbortController | null = null;
+  let noteController: AbortController | null = null;
+  let chatController: AbortController | null = null;
+  let inFlightMaterial: Promise<Material> | null = null;
   let tabId: number | null = null;
   let boundTabId: number | null = null;
   let currentKey: string | null = null;
@@ -197,6 +199,11 @@ export function useReader() {
     activeChatId.value = '';
     chatStatus.value = '';
     materialCache = null;
+    inFlightMaterial = null;
+    noteController?.abort();
+    chatController?.abort();
+    noteController = null;
+    chatController = null;
   }
 
   async function loadVideo(activeTabId: number, settings: Settings, force = false): Promise<void> {
@@ -224,6 +231,11 @@ export function useReader() {
       activeChatId.value = '';
       chatStatus.value = '';
       materialCache = null;
+      inFlightMaterial = null;
+      noteController?.abort();
+      chatController?.abort();
+      noteController = null;
+      chatController = null;
 
       // 笔记命中缓存则直接展示，省一次模型调用
       const cached = await getCachedNote(info.bvid, info.cid);
@@ -303,7 +315,7 @@ export function useReader() {
     return id;
   }
 
-  /** 采集素材；命中内存缓存则直接返回 */
+  /** 采集素材；命中内存缓存则直接返回，并在并发调用时复用进行中的 Promise */
   async function ensureMaterial(statusCb?: (s: string) => void): Promise<Material> {
     const info = state.value.info;
     if (info) {
@@ -311,56 +323,69 @@ export function useReader() {
       if (materialCache && materialCache.key === key) return materialCache.data;
     }
 
-    const id = requireTab();
-    statusCb?.('正在获取官方 AI 总结与字幕…');
-
-    const res: CollectResult = await askContent(id, 'collect', undefined, 60_000);
-    const { info: fresh, conclusion, subtitles } = res;
-    const key = `${fresh.bvid}:${fresh.cid}`;
-
-    // 优先用官方 AI 总结自带的全文字幕（免费且即时）
-    if (conclusion.available && conclusion.subtitle.length > 0) {
-      const data: Material = {
-        info: fresh,
-        conclusion,
-        subtitle: conclusion.subtitle,
-        subtitleSource: `B站官方 AI 字幕 · ${conclusion.subtitle.length} 条`,
-      };
-      materialCache = { key, data };
-      return data;
+    if (inFlightMaterial) {
+      statusCb?.('正在获取素材…');
+      return inFlightMaterial;
     }
 
-    // 其次用字幕轨（人工字幕优先，其次 AI 字幕）
-    if (subtitles.list.length > 0) {
-      statusCb?.('正在下载字幕…');
-      const sorted = [...subtitles.list].sort((a, b) => (a.isAi ? 1 : 0) - (b.isAi ? 1 : 0));
+    inFlightMaterial = (async () => {
+      try {
+        const id = requireTab();
+        statusCb?.('正在获取官方 AI 总结与字幕…');
 
-      for (const track of sorted) {
-        try {
-          const body = await askContent(id, 'fetchSubtitleBody', { url: track.url }, 30_000);
-          if (body.length > 0) {
-            const data: Material = {
-              info: fresh,
-              conclusion,
-              subtitle: body,
-              subtitleSource: `${track.lanDoc || track.lan} · ${body.length} 条`,
-            };
-            materialCache = { key, data };
-            return data;
-          }
-        } catch {
-          /* 换下一条字幕轨 */
+        const res: CollectResult = await askContent(id, 'collect', undefined, 60_000);
+        const { info: fresh, conclusion, subtitles } = res;
+        const key = `${fresh.bvid}:${fresh.cid}`;
+
+        // 优先用官方 AI 总结自带的全文字幕（免费且即时）
+        if (conclusion.available && conclusion.subtitle.length > 0) {
+          const data: Material = {
+            info: fresh,
+            conclusion,
+            subtitle: conclusion.subtitle,
+            subtitleSource: `B站官方 AI 字幕 · ${conclusion.subtitle.length} 条`,
+          };
+          materialCache = { key, data };
+          return data;
         }
+
+        // 其次用字幕轨（人工字幕优先，其次 AI 字幕）
+        if (subtitles.list.length > 0) {
+          statusCb?.('正在下载字幕…');
+          const sorted = [...subtitles.list].sort((a, b) => (a.isAi ? 1 : 0) - (b.isAi ? 1 : 0));
+
+          for (const track of sorted) {
+            try {
+              const body = await askContent(id, 'fetchSubtitleBody', { url: track.url }, 30_000);
+              if (body.length > 0) {
+                const data: Material = {
+                  info: fresh,
+                  conclusion,
+                  subtitle: body,
+                  subtitleSource: `${track.lanDoc || track.lan} · ${body.length} 条`,
+                };
+                materialCache = { key, data };
+                return data;
+              }
+            } catch {
+              /* 换下一条字幕轨 */
+            }
+          }
+        }
+
+        const hint =
+          subtitles.error ?? (conclusion.available ? '' : conclusion.reason) ?? '未知原因';
+
+        throw new Error(
+          `这个视频没有可用的字幕或官方总结（${hint}）。` +
+            `目前可直接处理的视频约占七成，剩余视频需要本地语音转写（规划中）。`,
+        );
+      } finally {
+        inFlightMaterial = null;
       }
-    }
+    })();
 
-    const hint =
-      subtitles.error ?? (conclusion.available ? '' : conclusion.reason) ?? '未知原因';
-
-    throw new Error(
-      `这个视频没有可用的字幕或官方总结（${hint}）。` +
-        `目前可直接处理的视频约占七成，剩余视频需要本地语音转写（规划中）。`,
-    );
+    return inFlightMaterial;
   }
 
   /** 把 Material 转成 buildXxxMessages 需要的形状 */
@@ -408,8 +433,8 @@ export function useReader() {
       return;
     }
 
-    controller?.abort();
-    controller = new AbortController();
+    noteController?.abort();
+    noteController = new AbortController();
 
     try {
       patch({
@@ -440,7 +465,7 @@ export function useReader() {
       // 用对象包一层：TS 无法追踪「回调里给 let 赋值」的控制流
       const gotUsage: { current: TokenUsage | null } = { current: null };
       const full = await streamChat(cfg, messages, {
-        signal: controller.signal,
+        signal: noteController.signal,
         onDelta: (delta) => {
           acc += delta;
           // 每 40 字符刷一次，兼顾流畅与渲染开销
@@ -475,7 +500,7 @@ export function useReader() {
       }
       patch({ phase: 'error', error: errText(e), status: '' });
     } finally {
-      controller = null;
+      noteController = null;
     }
   }
 
@@ -642,8 +667,8 @@ export function useReader() {
     chatBusy.value = true;
     chatStatus.value = '';
 
-    controller?.abort();
-    controller = new AbortController();
+    chatController?.abort();
+    chatController = new AbortController();
 
     const info = state.value.info;
     const chatKey = info ? `${info.bvid}:${info.cid}` : null;
@@ -682,7 +707,7 @@ export function useReader() {
       let reasoningAcc = '';
       const gotUsage: { current: TokenUsage | null } = { current: null };
       const full = await streamChat(cfg, messages, {
-        signal: controller.signal,
+        signal: chatController.signal,
         onDelta: (delta) => {
           acc += delta;
           if (acc.length % 30 < delta.length) {
@@ -735,7 +760,7 @@ export function useReader() {
     } finally {
       chatBusy.value = false;
       chatStatus.value = '';
-      controller = null;
+      chatController = null;
     }
   }
 
@@ -753,9 +778,25 @@ export function useReader() {
     chat.value = [];
   }
 
-  function stop(): void {
-    controller?.abort();
-    controller = null;
+  function stopNote(): void {
+    noteController?.abort();
+    noteController = null;
+  }
+
+  function stopChat(): void {
+    chatController?.abort();
+    chatController = null;
+  }
+
+  function stop(target?: 'note' | 'chat'): void {
+    if (target === 'note') {
+      stopNote();
+    } else if (target === 'chat') {
+      stopChat();
+    } else {
+      stopNote();
+      stopChat();
+    }
   }
 
   return {
@@ -777,6 +818,8 @@ export function useReader() {
     deleteChatSession,
     clearChatHistory,
     stop,
+    stopNote,
+    stopChat,
     sync,
     flushPendingSync,
     getTabId: () => tabId,

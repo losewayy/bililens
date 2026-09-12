@@ -132,6 +132,8 @@ vi.mock('@/composables/useBridge', () => ({
   },
 }));
 
+let streamDelayMs = 0;
+
 vi.mock('@/lib/llm', async () => {
   const actual = await vi.importActual<typeof import('@/lib/llm')>('@/lib/llm');
   return {
@@ -140,11 +142,24 @@ vi.mock('@/lib/llm', async () => {
       _cfg: unknown,
       messages: Array<{ role: string; content: unknown }>,
       cb: {
+        signal?: AbortSignal;
         onDelta: (s: string) => void;
         onReasoning?: (s: string) => void;
         onUsage?: (u: { promptTokens: number; completionTokens: number; totalTokens: number }) => void;
       },
     ) => {
+      if (cb.signal?.aborted) {
+        throw new DOMException('The user aborted a request.', 'AbortError');
+      }
+      if (streamDelayMs > 0) {
+        await new Promise<void>((resolve, reject) => {
+          const t = setTimeout(resolve, streamDelayMs);
+          cb.signal?.addEventListener('abort', () => {
+            clearTimeout(t);
+            reject(new DOMException('The user aborted a request.', 'AbortError'));
+          });
+        });
+      }
       // content 可能是「文字 + 图片」的数组，测试里统一拍平成文本
       const flat = messages.map((m) => ({ role: m.role, content: flatten(m.content) }));
       llmCalls.push({ sys: flat[0]?.content ?? '', msgs: flat, raw: messages });
@@ -190,6 +205,7 @@ async function boot(over: Partial<typeof DEFAULT_SETTINGS> = {}) {
 }
 
 beforeEach(() => {
+  streamDelayMs = 0;
   llmCalls = [];
   cache.clear();
   chats.clear();
@@ -507,5 +523,67 @@ describe('面板只认自己绑定的标签页', () => {
 
     expect(reader.state.value.markdown).not.toBe('');
     expect(reader.state.value.info).not.toBeNull();
+  });
+});
+
+/* ================================================================== *
+ * 六、并发与非阻塞执行
+ * ================================================================== */
+
+describe('目录与聊天双向非阻塞并发', () => {
+  it('★★ 笔记生成与聊天对话并发执行，互不打断且共享素材采集', async () => {
+    const reader = await boot();
+    streamDelayMs = 40;
+
+    const notePromise = reader.runNote(settings());
+    const chatPromise = reader.sendChat(settings(), '同时提问');
+
+    expect(reader.isBusy.value).toBe(true);
+    expect(reader.chatBusy.value).toBe(true);
+
+    await Promise.all([notePromise, chatPromise]);
+    await settle(reader);
+
+    expect(reader.state.value.markdown).toContain('notes');
+    expect(reader.state.value.phase).toBe('done');
+    expect(reader.chat.value).toHaveLength(2);
+    expect(reader.chat.value[1]?.content).toContain('这是回答');
+    expect(collectCalls).toBe(1);
+  });
+
+  it('★★ 停止笔记生成不会打断正在进行的聊天', async () => {
+    const reader = await boot();
+    streamDelayMs = 60;
+
+    void reader.runNote(settings());
+    void reader.sendChat(settings(), '提问不要被停');
+
+    await new Promise((r) => setTimeout(r, 10));
+    reader.stopNote();
+
+    await settle(reader);
+
+    expect(reader.state.value.status).toBe('已停止生成');
+    expect(reader.chat.value).toHaveLength(2);
+    expect(reader.chat.value[1]?.content).toContain('这是回答');
+    expect(reader.chatBusy.value).toBe(false);
+  });
+
+  it('★★ 停止聊天不会打断正在进行的笔记生成', async () => {
+    const reader = await boot();
+    streamDelayMs = 60;
+
+    void reader.runNote(settings());
+    void reader.sendChat(settings(), '提问稍后被停');
+
+    await new Promise((r) => setTimeout(r, 10));
+    reader.stopChat();
+
+    await settle(reader);
+
+    expect(reader.state.value.phase).toBe('done');
+    expect(reader.state.value.markdown).toContain('notes');
+    expect(reader.chat.value).toHaveLength(1);
+    expect(reader.chat.value[0]?.content).toBe('提问稍后被停');
   });
 });

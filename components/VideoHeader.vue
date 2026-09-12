@@ -1,13 +1,10 @@
 <script setup lang="ts">
 /**
- * VideoHeader.vue —— 视频信息头
- *
- * 相较旧版做了压缩：封面缩到 44px 方形，元信息并成一行，
- * 素材状态收为行内小字 —— 把纵向空间让给笔记正文。
+ * VideoHeader.vue —— 视频锚点微卡片（1:1 对齐 mock sp-video-anchor-box）
  */
 import { computed } from 'vue';
 import type { Conclusion, VideoInfo } from '@/lib/types';
-import { fmtCount, fmtDuration } from '@/lib/time';
+import { fmtDuration } from '@/lib/time';
 
 const props = defineProps<{
   info: VideoInfo;
@@ -17,156 +14,132 @@ const props = defineProps<{
 }>();
 
 const durationText = computed(() => fmtDuration(props.info.duration));
-const viewText = computed(() => (props.info.view ? `${fmtCount(props.info.view)} 播放` : ''));
-
 const hasOfficial = computed(() => props.conclusion?.available === true);
 const hasMaterial = computed(() => props.subtitleCount > 0);
 
-/** 多P视频时显示当前是第几 P */
-const pageText = computed(() =>
-  props.info.pageCount > 1 ? `P${props.info.pageIndex}/${props.info.pageCount}` : '',
-);
+const statusText = computed(() => {
+  if (hasOfficial.value && hasMaterial.value) return '官方总结 + 字幕已同步';
+  if (hasOfficial.value) return '官方总结已同步';
+  if (hasMaterial.value) return `字幕已同步 · ${props.subtitleCount} 条`;
+  return '无可用字幕';
+});
+
+const isStatusOk = computed(() => hasOfficial.value || hasMaterial.value);
 </script>
 
 <template>
-  <section class="vh">
-    <img v-if="info.cover" class="vh__cover" :src="info.cover" alt="" loading="lazy" />
+  <div class="vh-dock">
+    <div class="sp-video-anchor-box">
+      <img v-if="info.cover" class="sp-anchor-thumb" :src="info.cover" alt="" loading="lazy" />
+      <div v-else class="sp-anchor-thumb sp-anchor-thumb--empty" />
 
-    <div class="vh__main">
-      <h1 class="vh__title" :title="info.title">{{ info.title }}</h1>
-
-      <p class="vh__meta">
-        <span class="vh__up">{{ info.upName || '未知UP' }}</span>
-        <span class="vh__dot">·</span>
-        <span class="tnum">{{ durationText }}</span>
-        <template v-if="viewText">
-          <span class="vh__dot">·</span>
-          <span class="tnum">{{ viewText }}</span>
-        </template>
-        <template v-if="pageText">
-          <span class="vh__dot">·</span>
-          <span class="tnum">{{ pageText }}</span>
-        </template>
-      </p>
-
-      <!-- 素材状态：开跑前让用户知道素材够不够 -->
-      <p class="vh__mat">
-        <span class="chip" :class="hasOfficial ? 'chip--on' : 'chip--off'">
-          {{ hasOfficial ? '官方总结' : '无官方总结' }}
-        </span>
-        <span class="chip" :class="hasMaterial ? 'chip--on' : 'chip--off'">
-          {{ hasMaterial ? `字幕 ${subtitleCount}` : '无字幕' }}
-        </span>
-        <span v-if="info.partTitle" class="vh__part" :title="info.partTitle">
-          {{ info.partTitle }}
-        </span>
-      </p>
+      <div class="sp-anchor-meta">
+        <div class="sp-anchor-title" :title="info.title">{{ info.title }}</div>
+        <div class="sp-anchor-sub">
+          <span class="sp-status-chip" :class="{ 'sp-status-chip--off': !isStatusOk }">
+            {{ statusText }}
+          </span>
+          <span class="sp-anchor-duration">· {{ durationText }}</span>
+        </div>
+      </div>
     </div>
-  </section>
 
-  <p v-if="materialHint && !hasMaterial" class="vh-hint">{{ materialHint }}</p>
+    <p v-if="materialHint && !hasMaterial" class="vh-hint">{{ materialHint }}</p>
+  </div>
 </template>
 
 <style scoped>
-.vh {
-  display: flex;
-  gap: 10px;
-  padding: 11px 12px 10px;
-  border-bottom: 1px solid var(--line);
+.vh-dock {
+  padding: 0 12px 6px;
+  background: var(--bg-panel, var(--paper));
 }
 
-.vh__cover {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  object-fit: cover;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface-sunken);
-}
-
-.vh__main {
-  min-width: 0;
-  flex: 1;
-}
-
-.vh__title {
-  margin: 0 0 3px;
-  font-size: calc(13px * var(--fs));
-  font-weight: 640;
-  line-height: 1.45;
-  letter-spacing: -0.1px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.vh__meta {
+.sp-video-anchor-box {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin: 0 0 5px;
-  color: var(--ink-mist);
-  font-size: calc(11.5px * var(--fs));
+  gap: 9px;
+  background: var(--bg-sunken, var(--surface-sunken));
+  border: 1px solid var(--border-hairline, var(--line));
+  border-radius: var(--r-md);
+  padding: 6px 9px;
+  box-shadow: var(--shadow-sunken);
+}
+
+.sp-anchor-thumb {
+  width: 42px;
+  height: 28px;
+  border-radius: 3px;
+  object-fit: cover;
+  background: var(--bg-surface, var(--surface));
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle, var(--line));
+}
+
+.sp-anchor-thumb--empty {
+  background: var(--bg-surface-active, var(--surface-sunken));
+}
+
+.sp-anchor-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-anchor-title {
+  font-size: calc(12px * var(--fs));
+  font-weight: 600;
+  color: var(--text-main, var(--ink));
   white-space: nowrap;
   overflow: hidden;
-}
-
-.vh__up {
-  color: var(--bili-deep);
-  font-weight: 550;
-  overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.35;
 }
 
-.vh__dot {
-  color: var(--ink-faint);
-}
-
-.vh__mat {
+.sp-anchor-sub {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin: 0;
-  min-width: 0;
-}
-
-/* 素材徽章：行内小字，不抢视觉 */
-.chip {
-  padding: 1px 7px;
-  border-radius: 20px;
   font-size: calc(10.5px * var(--fs));
-  font-weight: 550;
+  color: var(--text-muted, var(--ink-mist));
+  margin-top: 2px;
   white-space: nowrap;
-}
-
-.chip--on {
-  background: var(--ok-wash);
-  color: var(--ok);
-}
-
-.chip--off {
-  background: var(--surface-sunken);
-  color: var(--ink-faint);
-}
-
-.vh__part {
-  margin-left: 2px;
-  color: var(--ink-faint);
-  font-size: calc(10.5px * var(--fs));
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.sp-status-chip {
+  color: var(--ok);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 530;
+  flex-shrink: 0;
+}
+
+.sp-status-chip::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.sp-status-chip--off {
+  color: var(--warn);
+}
+
+.sp-anchor-duration {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .vh-hint {
-  margin: 0;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
   background: var(--warn-wash);
   color: var(--warn);
-  font-size: calc(11.5px * var(--fs));
-  line-height: 1.55;
+  font-size: calc(11px * var(--fs));
+  line-height: 1.4;
 }
 </style>
