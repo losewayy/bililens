@@ -328,6 +328,7 @@ watch(
         :conclusion="state.conclusion"
         :material-hint="materialHint"
         :subtitle-count="state.subtitleCount"
+        :get-subtitles="reader.getSubtitles"
       />
     </header>
 

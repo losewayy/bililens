@@ -765,6 +765,21 @@ export function useReader() {
   }
 
   /**
+   * 供字幕导出用的字幕段。
+   *
+   * 命中素材缓存时零开销；未采集过会触发一次采集（与目录/聊天共享
+   * inFlightMaterial 去重）。失败返回 null，由 UI 静默收场。
+   */
+  async function getSubtitles(): Promise<SubtitleSegment[] | null> {
+    try {
+      const m = await ensureMaterial();
+      return m.subtitle;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * 清空聊天 = 删掉当前这个对话。
    *
    * 只影响活动对话，其他对话不受影响；删空后再发言会自动建新对话。
@@ -817,6 +832,7 @@ export function useReader() {
     switchChatSession,
     deleteChatSession,
     clearChatHistory,
+    getSubtitles,
     stop,
     stopNote,
     stopChat,
