@@ -35,10 +35,13 @@ const statusText = computed(() => {
   if (hasOfficial.value && hasMaterial.value) return '官方总结 + 字幕已同步';
   if (hasOfficial.value) return '官方总结已同步';
   if (hasMaterial.value) return `字幕已同步 · ${props.subtitleCount} 条`;
+  // 元信息还没回来（预取中/预取失败）——不下「无可用」的结论
+  if (isPending.value) return '检测字幕资源…';
   return '无可用字幕';
 });
 
 const isStatusOk = computed(() => hasOfficial.value || hasMaterial.value);
+const isPending = computed(() => !props.conclusion && !hasMaterial.value);
 
 /* ---------------- 字幕下载 ---------------- */
 
@@ -104,7 +107,10 @@ onUnmounted(() => {
       <div class="sp-anchor-meta">
         <div class="sp-anchor-title" :title="info.title">{{ info.title }}</div>
         <div class="sp-anchor-sub">
-          <span class="sp-status-chip" :class="{ 'sp-status-chip--off': !isStatusOk }">
+          <span
+            class="sp-status-chip"
+            :class="{ 'sp-status-chip--off': !isStatusOk && !isPending, 'sp-status-chip--pending': isPending }"
+          >
             {{ statusText }}
           </span>
           <span class="sp-anchor-duration">· {{ durationText }}</span>
@@ -228,6 +234,10 @@ onUnmounted(() => {
 
 .sp-status-chip--off {
   color: var(--warn);
+}
+
+.sp-status-chip--pending {
+  color: var(--text-muted, var(--ink-mist));
 }
 
 .sp-anchor-duration {

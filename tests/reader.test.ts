@@ -128,6 +128,19 @@ vi.mock('@/composables/useBridge', () => ({
       };
     }
     if (type === 'playhead') return { seconds: playheadValue };
+    if (type === 'aiConclusion') {
+      return {
+        available: true,
+        summary: '官方摘要',
+        outline: [],
+        subtitle: [
+          { from: 0, to: 5, content: '第一句' },
+          { from: 5, to: 9, content: '第二句' },
+        ],
+        resultType: 2,
+        like: 0,
+      };
+    }
     return undefined;
   },
 }));
@@ -585,5 +598,21 @@ describe('目录与聊天双向非阻塞并发', () => {
     expect(reader.state.value.markdown).toContain('notes');
     expect(reader.chat.value).toHaveLength(1);
     expect(reader.chat.value[0]?.content).toBe('提问稍后被停');
+  });
+});
+
+/* ================================================================== *
+ * 六、打开即准确的元信息
+ * ================================================================== */
+
+describe('视频元信息预取', () => {
+  it('★★ 打开面板就应拿到官方总结与字幕条数，不等用户先说话', async () => {
+    const reader = await boot();
+    await new Promise((r) => setTimeout(r, 10)); // 预取是异步的，等它落地
+
+    expect(reader.state.value.conclusion?.available).toBe(true);
+    expect(reader.state.value.subtitleCount).toBe(2);
+    // 未发起任何笔记/聊天，采集不应发生（预取走的是 aiConclusion，不是 collect）
+    expect(collectCalls).toBe(0);
   });
 });

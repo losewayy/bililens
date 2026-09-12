@@ -237,6 +237,31 @@ export function useReader() {
       noteController = null;
       chatController = null;
 
+      /*
+       * 预取官方总结（元信息），让顶部状态与字幕下载按钮打开即准确——
+       * 否则 conclusion/subtitleCount 在用户第一次发起笔记或聊天之前
+       * 一直是空值，头部会误报「无可用字幕」。
+       * 失败静默：后续动作触发的采集仍会拿到，界面不下错结论即可。
+       */
+      void askContent(
+        activeTabId,
+        'aiConclusion',
+        { aid: info.aid, bvid: info.bvid, cid: info.cid, upMid: info.upMid },
+        15_000,
+      )
+        .then((conclusion) => {
+          if (currentKey !== key) return; // 期间已切到别的视频
+          patch({
+            conclusion,
+            // 只在还没人填过时用官方字幕条数兜底，不覆盖字幕轨来源的计数
+            subtitleCount:
+              conclusion.available && state.value.subtitleCount === 0
+                ? conclusion.subtitle.length
+                : state.value.subtitleCount,
+          });
+        })
+        .catch(() => undefined);
+
       // 笔记命中缓存则直接展示，省一次模型调用
       const cached = await getCachedNote(info.bvid, info.cid);
       if (cached) {
