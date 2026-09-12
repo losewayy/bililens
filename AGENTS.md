@@ -121,6 +121,10 @@ MV3 的 Service Worker 约 30 秒空闲就被回收，长视频流式总结要�
     大字要略收比例，否则行距松得连不成段。
 11. **`assets/theme.css` 的令牌块是平的。** 往 `:root` 里加令牌时，
     注意别把它们误插进后面的 `[data-font='…']` 档位块里——那会让该令牌只在某一档生效。
+12. **Markdown 渲染产物的公共样式收在 `assets/theme.css` 的 `.md` 作用域**，
+    挂在 `NoteBody` 的 `.note__inner` 和 `ChatPanel` 的 `.msg__body` 上。
+    组件 scoped 样式里只放两侧**刻意不同**的微调（`.ts` 胶囊、标题、列表间距），
+    不要把公共规则再抄回组件——表格/代码块/链接/KaTeX/行内 code 都在 `.md` 里。
 
 ---
 

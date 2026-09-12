@@ -432,7 +432,7 @@ defineExpose({ focus: () => input.value?.focus() });
             </div>
             <p v-else-if="b.imagesLost" class="msg__lost">（这一轮的图片已不再保留）</p>
             <!-- eslint-disable-next-line vue/no-v-html -- 已在 markdown.ts 中转义 -->
-            <div class="msg__body" v-html="htmlOf(b)" />
+            <div class="msg__body md" v-html="htmlOf(b)" />
             <div v-if="b.usage" class="msg__usage tnum">
               输入 {{ fmtTokens(b.usage.promptTokens) }} · 输出
               {{ fmtTokens(b.usage.completionTokens) }} tokens
@@ -870,14 +870,7 @@ defineExpose({ focus: () => input.value?.focus() });
   font-weight: 650;
 }
 
-.msg :deep(code) {
-  padding: 1px 4px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface-sunken);
-  font-family: var(--font-time);
-  font-size: calc(11.5px * var(--fs));
-}
+/* 行内代码/表格/代码块/链接/公式的样式在全局 .md 作用域（theme.css） */
 
 /* 时间戳胶囊（聊天里是「引用」，点了跳转） */
 .msg :deep(.ts) {
@@ -895,71 +888,6 @@ defineExpose({ focus: () => input.value?.focus() });
 .msg :deep(.ts:hover) {
   background: var(--bili);
   color: #fff;
-}
-
-/* ---------------- 表格 / 代码块 / 链接 / 公式 ---------------- */
-
-.msg :deep(table) {
-  margin: 8px 0;
-  border-collapse: collapse;
-  width: 100%;
-  font-size: calc(11.5px * var(--fs));
-}
-
-.msg :deep(th),
-.msg :deep(td) {
-  border: 1px solid var(--line);
-  padding: 4px 8px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.msg :deep(th) {
-  background: var(--surface-sunken);
-  font-weight: 650;
-  color: var(--ink);
-}
-
-.msg :deep(td) {
-  color: var(--ink-soft);
-}
-
-.msg :deep(pre) {
-  margin: 8px 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface-sunken);
-  overflow-x: auto;
-}
-
-.msg :deep(pre code) {
-  padding: 0;
-  border: none;
-  background: none;
-  white-space: pre;
-  line-height: 1.6;
-}
-
-.msg :deep(a) {
-  color: var(--bili-deep);
-  text-decoration: none;
-  border-bottom: 1px solid var(--bili-line);
-}
-
-.msg :deep(a:hover) {
-  border-bottom-color: var(--bili-deep);
-}
-
-.msg :deep(.katex) {
-  font-size: 1.06em;
-}
-
-.msg :deep(.katex-display) {
-  margin: 8px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 2px 0;
 }
 
 /* ---------------- 空态 ---------------- */
@@ -1077,60 +1005,6 @@ defineExpose({ focus: () => input.value?.focus() });
 .jumpbar__btn:hover {
   border-color: var(--bili);
   color: var(--bili-deep);
-}
-
-/* 待发送的缩略图 */
-.attaches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 7px;
-}
-
-.attach {
-  position: relative;
-  width: 54px;
-  height: 54px;
-}
-
-.attach__img {
-  width: 100%;
-  height: 100%;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  object-fit: cover;
-}
-
-.attach__del {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: calc(12px * var(--fs));
-  line-height: 1;
-  box-shadow: var(--shadow-1);
-}
-
-.attach__del:hover {
-  border-color: var(--err);
-  color: var(--err);
-}
-
-.composer__hint {
-  margin: 0 0 6px;
-  color: var(--ink-mist);
-  font-size: calc(11.5px * var(--fs));
-}
-
-.composer__hint--warn {
-  color: var(--warn);
 }
 
 /* 待发送的缩略图 */
@@ -1310,35 +1184,6 @@ defineExpose({ focus: () => input.value?.focus() });
   background: var(--bili);
   vertical-align: -2px;
   animation: blink 1.05s steps(2, start) infinite;
-}
-
-/* ---------------- 图片放大 ---------------- */
-
-.preview {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.82);
-  cursor: zoom-out;
-}
-
-.preview__img {
-  max-width: 100%;
-  max-height: 82vh;
-  border-radius: var(--r-sm);
-  object-fit: contain;
-}
-
-.preview__tip {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: calc(11.5px * var(--fs));
 }
 
 /* ---------------- 图片放大 ---------------- */

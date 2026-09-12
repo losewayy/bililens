@@ -129,7 +129,7 @@ function onClick(ev: MouseEvent): void {
 <template>
   <article ref="root" class="note" :class="{ 'note--streaming': props.streaming }" @click="onClick">
     <!-- eslint-disable-next-line vue/no-v-html -- 内容已在 markdown.ts 中做过转义 -->
-    <div class="note__inner" v-html="props.html" />
+    <div class="note__inner md" v-html="props.html" />
     <span v-if="props.streaming" class="caret" aria-hidden="true" />
   </article>
 </template>
@@ -356,85 +356,10 @@ function onClick(ev: MouseEvent): void {
   font-style: italic;
 }
 
-.note :deep(code) {
-  padding: 1.5px 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface-sunken);
-  font-family: var(--font-time);
-  font-size: calc(11.5px * var(--fs));
-}
-
 .note :deep(hr) {
   margin: 18px 0;
   border: none;
   border-top: 1px solid var(--line);
-}
-
-/* ---------------- 表格 / 代码块 / 链接 / 公式 ---------------- */
-
-.note :deep(table) {
-  margin: 10px 0;
-  border-collapse: collapse;
-  width: 100%;
-  font-size: calc(12px * var(--fs));
-}
-
-.note :deep(th),
-.note :deep(td) {
-  border: 1px solid var(--line);
-  padding: 5px 9px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.note :deep(th) {
-  background: var(--surface-sunken);
-  font-weight: 650;
-  color: var(--ink);
-}
-
-.note :deep(td) {
-  color: var(--ink-soft);
-}
-
-.note :deep(pre) {
-  margin: 10px 0;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface-sunken);
-  overflow-x: auto;
-}
-
-.note :deep(pre code) {
-  padding: 0;
-  border: none;
-  background: none;
-  white-space: pre;
-  line-height: 1.6;
-}
-
-.note :deep(a) {
-  color: var(--bili-deep);
-  text-decoration: none;
-  border-bottom: 1px solid var(--bili-line);
-}
-
-.note :deep(a:hover) {
-  border-bottom-color: var(--bili-deep);
-}
-
-/* KaTeX 公式：随正文字号，独立公式超宽时横向滚动 */
-.note :deep(.katex) {
-  font-size: 1.06em;
-}
-
-.note :deep(.katex-display) {
-  margin: 10px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 2px 0;
 }
 
 /* ================================================================== *
