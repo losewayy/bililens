@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      选项页内容较宽（多列表单），塞进扩展弹窗会非常局促，
+      因此要求在独立标签页中打开。
+      WXT 默认写入 open_in_tab: false，需用此 meta 覆盖。
+    -->
+    <meta name="manifest.open_in_tab" content="true" />
+    <title>BiliLens 设置</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

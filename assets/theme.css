@@ -1,0 +1,241 @@
+/**
+ * assets/theme.css —— BiliLens 设计令牌
+ *
+ * 设计主张：**把「时间」做成界面上唯一的视觉主角。**
+ *
+ * BiliLens 的全部价值 = 把线性的视频时间压成可扫读的文字。
+ * 因此粉色（bilibili 品牌色）被当作稀缺资源：
+ * 它只出现在与「时间」和「当前状态」有关的地方——
+ * 时间刻度、进行中、选中项。用户扫一眼，粉色所在即重点。
+ *
+ * 其余一切保持安静：中性灰阶、无渐变、无装饰图标。
+ */
+
+/* ================================================================== *
+ * 令牌
+ * ================================================================== */
+
+:root {
+  /* --- 品牌色：稀缺资源 --- */
+  --bili: #fb7299;
+  --bili-deep: #e0507a;
+  --bili-wash: rgba(251, 114, 153, 0.1);
+  --bili-line: rgba(251, 114, 153, 0.34);
+
+  /* --- 中性色阶（带极轻微冷调，避免死灰） --- */
+  --paper: #fbfbfd;
+  --surface: #ffffff;
+  --surface-sunken: #f4f5f8;
+  --ink: #14161c;
+  --ink-soft: #545b6b;
+  --ink-mist: #8b93a4;
+  --ink-faint: #aeb5c2;
+  --line: #e6e8ee;
+  --line-strong: #d3d7e0;
+
+  /* --- 语义色（仅用于状态，不作装饰） --- */
+  --ok: #0f9d6e;
+  --ok-wash: rgba(15, 157, 110, 0.1);
+  --warn: #c77a08;
+  --warn-wash: rgba(199, 122, 8, 0.1);
+  --err: #d93b47;
+  --err-wash: rgba(217, 59, 71, 0.09);
+
+  /* --- 字体 --- */
+  --font-ui:
+    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  /* 时间数字：等宽 + 表格数字。
+     这是本设计的技术支点——没有它，时间轴就是歪的，
+     0:01 与 11:26 无法成列对齐。 */
+  --font-time: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  /* --- 尺度 --- */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  --shadow-1: 0 1px 2px rgba(20, 22, 28, 0.05);
+  --shadow-2: 0 4px 16px rgba(20, 22, 28, 0.08);
+
+  /* --- 时间轴导轨（签名元素）--- */
+  --rail-w: 2px;
+  --rail-node: 7px;
+
+  /* --- 界面字号倍率（见下方档位规则）--- */
+  --fs: 1;
+
+  /* --- 正文行高 --- */
+  --lh: 1.6;
+
+  /* --- 长文阅读区行高 --- */
+  --lh-read: 1.78;
+}
+
+/*
+ * 字号档位。
+ *
+ * 用 <html data-font="…"> 而不是内联 style：内联只能覆盖 --fs 本身，
+ * 而这些档位还带着行高的联动，写在 CSS 里可以一并处理。
+ *
+ * 选项页与侧边栏共用这份令牌，但倍率由各自的启动代码写入：
+ * 只有侧边栏跟着用户设置走，设置页永远用标准档
+ * （否则用户把字号调大后，想改回来时反而在设置页里找不到北）。
+ */
+:root[data-font='large'] {
+  --fs: 1.15;
+  --lh: 1.64;
+  --lh-read: 1.74;
+}
+
+:root[data-font='xlarge'] {
+  --fs: 1.3;
+  --lh: 1.7;
+  --lh-read: 1.68;
+}
+
+:root[data-font='huge'] {
+  --fs: 1.45;
+  --lh: 1.76;
+  --lh-read: 1.62;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bili: #ff85a8;
+    --bili-deep: #fb7299;
+    --bili-wash: rgba(255, 133, 168, 0.13);
+    --bili-line: rgba(255, 133, 168, 0.4);
+
+    --paper: #0d0e12;
+    --surface: #16181f;
+    --surface-sunken: #1c1f27;
+    --ink: #eceef3;
+    --ink-soft: #a5adbd;
+    --ink-mist: #767f90;
+    --ink-faint: #5c6474;
+    --line: #262a34;
+    --line-strong: #343a47;
+
+    --ok: #34d399;
+    --ok-wash: rgba(52, 211, 153, 0.13);
+    --warn: #fbbf24;
+    --warn-wash: rgba(251, 191, 36, 0.13);
+    --err: #f87171;
+    --err-wash: rgba(248, 113, 113, 0.13);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 4px 18px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ================================================================== *
+ * 基线
+ * ================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: calc(13px * var(--fs));
+  line-height: var(--lh);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* 键盘可达性：只在键盘导航时显示焦点环 */
+:focus-visible {
+  outline: 2px solid var(--bili);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* 尊重用户的减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 时间数字的公共类：等宽 + 表格数字，保证成列对齐 */
+.tnum {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* --- 滚动条：细，不抢视线 --- */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+  background-clip: padding-box;
+}
+
+/* ================================================================== *
+ * logo 资产容器
+ *
+ * 8 家服务商的官方标识已用 scripts/fetch-logos.mjs 取到真实文件。
+ * 它们有单色矢量也有彩色位图，统一放在浅底容器里：
+ * 这样深浅两种主题下都清晰，视觉也统一。
+ * ================================================================== */
+
+.logo-tile {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.logo-tile img {
+  width: 62%;
+  height: 62%;
+  object-fit: contain;
+  display: block;
+}

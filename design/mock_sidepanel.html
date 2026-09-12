@@ -1,0 +1,1958 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BiliLens · 精密社论级侧边栏 UI/UX</title>
+  <style>
+    /* ==========================================================================
+       设计系统：精密社论风格 (Machined Editorial Style)
+       - 严守两大既有核心功能：目录（全文总结+导轨提纲）与 聊天（伴读追问+播放位置+图片粘贴）
+       - 彻底剔除浮动通知噪音，采用原位（In-situ）物理微动反馈
+       - 融入精密章节标尺 (Micro Chapter Ruler) 与渐进式导轨 (Progressive Rail)
+       ========================================================================== */
+    :root {
+      --bili: #fb7299;
+      --bili-hover: #e0507a;
+      --bili-wash: rgba(251, 114, 153, 0.09);
+      --bili-line: rgba(251, 114, 153, 0.25);
+      --bili-glow: rgba(251, 114, 153, 0.28);
+
+      --ok: #10b981;
+      --ok-wash: rgba(16, 185, 129, 0.1);
+
+      --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --duration: 160ms;
+
+      --r-pill: 9999px;
+      --r-xl: 14px;
+      --r-lg: 10px;
+      --r-md: 7px;
+      --r-sm: 4px;
+    }
+
+    /* 深色模式：曜石墨韵 (Obsidian Ink) */
+    html[data-theme="dark"] {
+      --bg-canvas: #090a0d;
+      --bg-panel: #111317;
+      --bg-surface: #171920;
+      --bg-surface-hover: #1e212b;
+      --bg-surface-active: #252834;
+      --bg-sunken: #0c0d11;
+      --bg-glass: rgba(17, 19, 23, 0.88);
+
+      --border-hairline: rgba(255, 255, 255, 0.05);
+      --border-subtle: rgba(255, 255, 255, 0.09);
+      --border-medium: rgba(255, 255, 255, 0.16);
+
+      --text-hero: #ffffff;
+      --text-main: #f1f3f7;
+      --text-secondary: #9aa1b0;
+      --text-muted: #646b79;
+      --text-faint: #434854;
+
+      --rail-line: #22252e;
+      --rail-line-filled: rgba(251, 114, 153, 0.45);
+      --rail-node-bg: #111317;
+
+      --shadow-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      --shadow-sunken: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+      --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.3);
+      --shadow-pop: 0 14px 36px rgba(0, 0, 0, 0.55);
+    }
+
+    /* 浅色模式：细格纸本 (Fine Paper) */
+    html[data-theme="light"] {
+      --bg-canvas: #f0f2f6;
+      --bg-panel: #ffffff;
+      --bg-surface: #ffffff;
+      --bg-surface-hover: #f6f8fb;
+      --bg-surface-active: #edf0f6;
+      --bg-sunken: #f5f6fa;
+      --bg-glass: rgba(255, 255, 255, 0.92);
+
+      --border-hairline: rgba(0, 0, 0, 0.04);
+      --border-subtle: rgba(0, 0, 0, 0.08);
+      --border-medium: rgba(0, 0, 0, 0.14);
+
+      --text-hero: #0f172a;
+      --text-main: #1e293b;
+      --text-secondary: #475569;
+      --text-muted: #848e9f;
+      --text-faint: #cbd5e1;
+
+      --rail-line: #e6e8ee;
+      --rail-line-filled: rgba(251, 114, 153, 0.5);
+      --rail-node-bg: #ffffff;
+
+      --shadow-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      --shadow-sunken: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+      --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.04);
+      --shadow-pop: 0 14px 36px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg-canvas);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    button {
+      font-family: inherit;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: inherit;
+    }
+
+    input, textarea {
+      font-family: inherit;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: inherit;
+    }
+
+    /* ==========================================================================
+       顶部操控台 (用于体验视角与主题)
+       ========================================================================== */
+    .hud-bar {
+      height: 48px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      box-shadow: var(--shadow-bevel);
+    }
+
+    .hud-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+    }
+
+    .hud-style-tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--bili);
+      background: var(--bili-wash);
+      border: 1px solid var(--bili-line);
+      padding: 2px 8px;
+      border-radius: var(--r-pill);
+      letter-spacing: 0.2px;
+    }
+
+    .hud-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .hud-pill-box {
+      display: flex;
+      background: var(--bg-sunken);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-md);
+      padding: 2px;
+      gap: 2px;
+      box-shadow: var(--shadow-sunken);
+    }
+
+    .hud-pill-btn {
+      font-size: 12px;
+      padding: 3px 11px;
+      border-radius: var(--r-sm);
+      color: var(--text-muted);
+      transition: all var(--duration) var(--ease);
+      font-weight: 500;
+    }
+    .hud-pill-btn.active {
+      background: var(--bg-panel);
+      color: var(--text-hero);
+      font-weight: 600;
+      box-shadow: var(--shadow-card);
+    }
+
+    /* ==========================================================================
+       主工作区
+       ========================================================================== */
+    .deck-stage {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      padding: 24px;
+      max-width: 1520px;
+      margin: 0 auto;
+      height: calc(100vh - 48px);
+    }
+
+    body.view-solo .sim-screen-deck {
+      display: none;
+    }
+    body.view-solo .sidepanel-shell {
+      box-shadow: var(--shadow-pop);
+    }
+
+    /* --- 模拟 B站播放区 --- */
+    .sim-screen-deck {
+      flex: 1;
+      min-width: 500px;
+      max-width: 900px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-xl);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-card);
+    }
+
+    .sim-viewport-player {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      background: #08090c;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .sim-center-beacon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .sim-play-trigger {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: rgba(251, 114, 153, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 10px;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      transition: transform var(--duration) var(--ease);
+    }
+    .sim-play-trigger:hover {
+      transform: scale(1.08);
+    }
+
+    .sim-beacon-toast {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.85);
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(8px);
+      padding: 4px 14px;
+      border-radius: var(--r-pill);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .sim-player-bar {
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
+      padding: 24px 18px 12px;
+    }
+
+    .sim-scrub-lane {
+      position: relative;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      cursor: pointer;
+      margin-bottom: 6px;
+    }
+
+    .sim-scrub-progress {
+      height: 100%;
+      width: 22%;
+      background: var(--bili);
+      border-radius: 3px;
+      position: relative;
+      transition: width 120ms linear;
+    }
+
+    .sim-scrub-pin {
+      position: absolute;
+      right: -5px;
+      top: -3.5px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+    }
+
+    .sim-time-stats {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: rgba(255, 255, 255, 0.8);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sim-info-pane {
+      padding: 22px;
+      flex: 1;
+    }
+
+    .sim-headline {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.4;
+      margin-bottom: 8px;
+      color: var(--text-hero);
+    }
+
+    .sim-meta-row {
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 16px;
+    }
+
+    /* ==========================================================================
+       核心交付物：精密社论级侧边栏 (388px 标准宽度)
+       ========================================================================== */
+    .sidepanel-shell {
+      width: 388px;
+      height: 100%;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-xl);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      transition: all var(--duration) var(--ease);
+    }
+
+    /* --- 1. 顶部视频信息卡 --- */
+    .sp-header-dock {
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--border-hairline);
+      background: var(--bg-panel);
+    }
+
+    .sp-brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 9px;
+    }
+
+    .sp-brand-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sp-monogram {
+      width: 17px;
+      height: 17px;
+      border-radius: 4px;
+      background: var(--bili);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sp-product-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--text-hero);
+    }
+
+    .sp-tools-cluster {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .sp-icon-button {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--r-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: all var(--duration) var(--ease);
+      position: relative;
+    }
+    .sp-icon-button:hover {
+      background: var(--bg-surface-hover);
+      color: var(--text-hero);
+    }
+
+    /* 原位反馈：Obsidian 保存成功时的微动高亮 */
+    .sp-icon-button.success-flash {
+      color: var(--ok);
+      background: var(--ok-wash);
+      animation: iconFlash 1.4s var(--ease);
+    }
+    @keyframes iconFlash {
+      0%, 100% { transform: scale(1); }
+      30% { transform: scale(1.15); }
+    }
+
+    /* 视频锚点微卡片 */
+    .sp-video-anchor-box {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: var(--bg-sunken);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--r-md);
+      padding: 6px 9px;
+      box-shadow: var(--shadow-sunken);
+    }
+
+    .sp-anchor-thumb {
+      width: 42px;
+      height: 28px;
+      border-radius: 3px;
+      object-fit: cover;
+      background: var(--bg-surface);
+      flex-shrink: 0;
+    }
+
+    .sp-anchor-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sp-anchor-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.35;
+    }
+
+    .sp-anchor-sub {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .sp-status-chip {
+      color: var(--ok);
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-weight: 500;
+    }
+    .sp-status-chip::before {
+      content: "";
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* --- 2. 核心双模选项卡 --- */
+    .sp-tab-deck {
+      padding: 8px 14px 0;
+      background: var(--bg-panel);
+    }
+
+    .machined-segmented {
+      display: flex;
+      background: var(--bg-sunken);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--r-md);
+      padding: 2px;
+      position: relative;
+      box-shadow: var(--shadow-sunken);
+    }
+
+    .machined-slider {
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      left: 2px;
+      width: calc(50% - 2px);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      box-shadow: var(--shadow-bevel), var(--shadow-card);
+      transition: transform 220ms var(--ease);
+      z-index: 1;
+    }
+
+    .machined-tab-btn {
+      flex: 1;
+      height: 27px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      position: relative;
+      z-index: 2;
+      transition: color var(--duration) var(--ease);
+      user-select: none;
+    }
+
+    .machined-tab-btn.active {
+      color: var(--text-hero);
+      font-weight: 600;
+    }
+
+    .machined-counter {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      background: var(--bg-sunken);
+      color: var(--text-muted);
+      padding: 0 5px;
+      border-radius: var(--r-pill);
+      line-height: 15px;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid var(--border-hairline);
+    }
+    .machined-tab-btn.active .machined-counter {
+      color: var(--bili);
+      background: var(--bili-wash);
+      border-color: var(--bili-line);
+    }
+
+
+    /* --- 3. 滚动主体视口 --- */
+    .sp-scroll-view {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    .sp-scroll-view::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sp-scroll-view::-webkit-scrollbar-thumb {
+      background: var(--border-medium);
+      border-radius: var(--r-pill);
+    }
+
+    .sp-tab-page {
+      display: none;
+      padding: 14px 14px 20px;
+    }
+    .sp-tab-page.active {
+      display: block;
+      animation: pageReveal 150ms var(--ease);
+    }
+
+    @keyframes pageReveal {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* ==========================================================================
+       模块 1：目录（全文总结 + 渐进式导轨提纲）
+       ========================================================================== */
+    .executive-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-lg);
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow-bevel), var(--shadow-card);
+      position: relative;
+    }
+
+    .executive-lead {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .executive-text {
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      line-height: 1.64;
+    }
+
+    /* ==========================================================================
+       模块 1：目录（高精度精密时序导轨系统 Precision Editorial Timeline）
+       ========================================================================== */
+    .editorial-timeline {
+      position: relative;
+      padding-left: 28px;
+      margin-top: 4px;
+    }
+
+    /* 贯穿式精密导轨中轴 (精密 2px 微沉凹槽) */
+    .timeline-spine-bg {
+      position: absolute;
+      left: 10px;
+      top: 15px;
+      bottom: 26px;
+      width: 2px;
+      background: var(--border-subtle);
+      border-radius: 1px;
+    }
+
+    /* 动态填充的进度导轨 (随视频播放平滑延伸) */
+    .timeline-spine-fill {
+      position: absolute;
+      left: 10px;
+      top: 15px;
+      width: 2px;
+      height: 40%;
+      background: linear-gradient(180deg, var(--bili) 0%, rgba(251, 114, 153, 0.75) 100%);
+      border-radius: 1px;
+      transition: height 260ms cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* 单个章节块：复合型卡片结构 */
+    .timeline-chapter {
+      position: relative;
+      margin-bottom: 14px;
+      transition: all var(--duration) var(--ease);
+    }
+
+    /* 导轨定位锚点插槽：绝对定位于导轨中轴上 (X=11px 为中心) */
+    .timeline-node-slot {
+      position: absolute;
+      left: -28px;
+      top: 6px;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    /* 机械感微引脚：未激活状态（静止优雅微圆核） */
+    .timeline-node-pin {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--bg-panel);
+      border: 1.5px solid var(--border-medium);
+      transition: all var(--duration) cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+
+    .timeline-node-slot:hover .timeline-node-pin,
+    .timeline-chapter:hover .timeline-node-pin {
+      border-color: var(--text-secondary);
+      background: var(--border-subtle);
+      transform: scale(1.25);
+    }
+
+    /* 已浏览/已播放章节：微型实体实心粉核，干净利落 */
+    .timeline-chapter.visited .timeline-node-pin {
+      width: 7px;
+      height: 7px;
+      background: var(--bili);
+      border: 1.5px solid var(--bili);
+      opacity: 0.65;
+    }
+
+    /* 当前正在播放的激活章节：微仪表级呼吸靶心与极小播放符文 */
+    .timeline-chapter.current .timeline-node-pin {
+      width: 17px;
+      height: 17px;
+      background: var(--bg-panel);
+      border: 1.5px solid var(--bili);
+      box-shadow: 0 0 0 3px var(--bili-wash), 0 0 8px rgba(251, 114, 153, 0.25);
+      animation: precisionPulse 2.8s infinite cubic-bezier(0.4, 0, 0.6, 1);
+      color: var(--bili);
+      opacity: 1;
+    }
+
+    @keyframes precisionPulse {
+      0%, 100% {
+        box-shadow: 0 0 0 3px var(--bili-wash), 0 0 8px rgba(251, 114, 153, 0.2);
+      }
+      50% {
+        box-shadow: 0 0 0 5px rgba(251, 114, 153, 0.18), 0 0 12px rgba(251, 114, 153, 0.35);
+      }
+    }
+
+    .node-active-glyph {
+      display: none;
+      width: 7px;
+      height: 7px;
+    }
+
+    .timeline-chapter.current .node-active-glyph {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 章节主卡片：与左侧导轨紧密锁定的社论排版卡 */
+    .timeline-card {
+      padding: 7px 10px;
+      border-radius: var(--r-md);
+      border: 1px solid transparent;
+      background: transparent;
+      transition: all var(--duration) var(--ease);
+      cursor: pointer;
+    }
+
+    .timeline-chapter:hover .timeline-card {
+      background: var(--bg-surface);
+      border-color: var(--border-subtle);
+    }
+
+    /* 当前激活章节卡片：温润微抬升与内凹高亮边 */
+    .timeline-chapter.current .timeline-card {
+      background: linear-gradient(90deg, rgba(251, 114, 153, 0.05) 0%, var(--bg-surface) 40%);
+      border: 1px solid var(--border-subtle);
+      border-left: 2.5px solid var(--bili);
+      box-shadow: var(--shadow-card);
+    }
+
+    /* 章节标题栏：时间戳与标题同频 */
+    .timeline-header {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 6px;
+    }
+
+    /* 精密切割时间戳芯片：去除臃肿边框，采用高精度等宽排印 */
+    .timeline-time {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+      letter-spacing: 0.3px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--bg-surface-hover);
+      border: 1px solid var(--border-hairline);
+      transition: all var(--duration) var(--ease);
+    }
+
+    .timeline-chapter:hover .timeline-time {
+      color: var(--text-primary);
+      border-color: var(--border-subtle);
+    }
+
+    .timeline-chapter.current .timeline-time {
+      color: var(--bili);
+      background: var(--bili-wash);
+      border-color: var(--bili-line);
+    }
+
+    /* 章节主标题 */
+    .timeline-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-hero);
+      line-height: 1.4;
+      margin: 0;
+      flex: 1;
+      letter-spacing: -0.15px;
+      transition: color var(--duration) var(--ease);
+    }
+
+    .timeline-chapter.current .timeline-title {
+      font-weight: 700;
+      color: var(--text-hero);
+    }
+
+    /* 当前播放状态指示胶囊 */
+    .timeline-live-tag {
+      display: none;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: var(--bili);
+      background: var(--bili-wash);
+      border: 1px solid var(--bili-line);
+      padding: 0 5px;
+      border-radius: 3px;
+      line-height: 15px;
+      letter-spacing: 0.4px;
+      flex-shrink: 0;
+    }
+
+    .timeline-chapter.current .timeline-live-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    /* 章节要点体：彻底摒弃圆点符号，改用结构化标签微芯片与正文配对 */
+    .timeline-body {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-top: 1px;
+    }
+
+    .timeline-item {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      font-size: 12px;
+      line-height: 1.58;
+    }
+
+    /* 紧凑微标签：取代突兀的 bullet 原点 */
+    .item-tag {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-hairline);
+      padding: 0 4px;
+      border-radius: 2.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 16px;
+      letter-spacing: 0.1px;
+      transition: all var(--duration) var(--ease);
+    }
+
+    [data-theme="light"] .item-tag {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .timeline-chapter:hover .item-tag {
+      color: var(--text-primary);
+      border-color: var(--border-subtle);
+    }
+
+    .timeline-chapter.current .item-tag {
+      color: var(--text-hero);
+      background: rgba(251, 114, 153, 0.08);
+      border-color: rgba(251, 114, 153, 0.2);
+    }
+
+    .item-desc {
+      color: var(--text-secondary);
+      flex: 1;
+    }
+
+    .timeline-chapter.current .item-desc {
+      color: var(--text-primary);
+    }
+
+    /* 对话内时间戳芯片 */
+    .chronograph-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--bili);
+      background: var(--bili-wash);
+      border: 1px solid var(--bili-line);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+      transition: all var(--duration) var(--ease);
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .chronograph-pill:hover {
+      background: var(--bili);
+      color: #fff;
+    }
+    .chronograph-pill:active {
+      transform: scale(0.92);
+    }
+
+    /* 侧边栏固定底舱外层 (完全解耦滚动层与页面动画，杜绝切换位移跳动) */
+    .sp-bottom-dock-container {
+      flex-shrink: 0;
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border-hairline);
+      position: relative;
+      z-index: 10;
+    }
+
+    /* 目录操作底栏 */
+    .sp-dock-footer {
+      padding: 10px 14px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .machined-btn-primary {
+      flex: 1;
+      height: 32px;
+      background: var(--bili);
+      color: #fff;
+      border-radius: var(--r-md);
+      font-size: 12.5px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      transition: all var(--duration) var(--ease);
+    }
+    .machined-btn-primary:hover {
+      background: var(--bili-hover);
+      transform: translateY(-0.5px);
+    }
+    .machined-btn-primary:active {
+      transform: translateY(0);
+    }
+
+    /* 原位复制按钮：点击后就地呈现状态变化，告别遮挡式浮动弹窗 */
+    .machined-btn-ghost {
+      height: 32px;
+      padding: 0 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-md);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: var(--shadow-bevel);
+      transition: all var(--duration) var(--ease);
+    }
+    .machined-btn-ghost:hover {
+      background: var(--bg-surface-hover);
+      color: var(--text-hero);
+      border-color: var(--border-medium);
+    }
+    .machined-btn-ghost.is-copied {
+      color: var(--ok);
+      border-color: var(--ok);
+      background: var(--ok-wash);
+    }
+
+    /* ==========================================================================
+       模块 2：聊天（全字幕伴读追问 + 播放感知 + 截图粘贴）
+       ========================================================================== */
+    /* 播放感知吸顶条 */
+    .playhead-sync-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-md);
+      padding: 7px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-bevel);
+    }
+
+    .sync-status-group {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+    }
+
+    .sync-signal-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 0 2px var(--ok-wash);
+    }
+
+    .sync-time-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--bili);
+      background: var(--bili-wash);
+      border: 1px solid var(--bili-line);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 微触感拨动开关 */
+    .tactile-switch {
+      position: relative;
+      width: 30px;
+      height: 17px;
+      background: var(--border-medium);
+      border-radius: 9px;
+      cursor: pointer;
+      transition: background 160ms var(--ease);
+    }
+    .tactile-switch.active {
+      background: var(--bili);
+    }
+    .tactile-knob {
+      position: absolute;
+      left: 2px;
+      top: 2px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      transition: transform 160ms var(--ease);
+    }
+    .tactile-switch.active .tactile-knob {
+      transform: translateX(13px);
+    }
+
+    /* 对话流 */
+    .dialogue-thread {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .dialogue-user-row {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .dialogue-user-bubble {
+      max-width: 86%;
+      background: var(--bili);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 12px 12px 2px 12px;
+      font-size: 12.5px;
+      line-height: 1.48;
+      word-break: break-word;
+      box-shadow: 0 2px 6px rgba(251, 114, 153, 0.25);
+    }
+
+    .dialogue-user-image {
+      max-width: 120px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      display: block;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .dialogue-assistant-row {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .reasoning-accordion {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 3px 8px;
+      border-radius: var(--r-sm);
+      margin-bottom: 8px;
+      cursor: pointer;
+      user-select: none;
+      width: fit-content;
+      transition: all var(--duration) var(--ease);
+    }
+    .reasoning-accordion:hover {
+      color: var(--text-secondary);
+      border-color: var(--border-medium);
+    }
+
+    .reasoning-panel {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg-sunken);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--r-sm);
+      padding: 7px 9px;
+      margin-bottom: 8px;
+      line-height: 1.45;
+      display: none;
+    }
+    .reasoning-accordion.expanded + .reasoning-panel {
+      display: block;
+    }
+
+    .dialogue-assistant-body {
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--text-main);
+    }
+
+    .dialogue-assistant-body p {
+      margin-bottom: 7px;
+    }
+    .dialogue-assistant-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    .dialogue-assistant-body ul {
+      margin: 4px 0 7px 16px;
+    }
+
+    .dialogue-assistant-body li {
+      margin-bottom: 4px;
+    }
+
+    .streaming-pulse-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 13px;
+      background: var(--bili);
+      margin-left: 2px;
+      vertical-align: -2px;
+      animation: pulseBlink 800ms infinite;
+    }
+    @keyframes pulseBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* 聊天输入底舱 */
+    .chat-input-dock {
+      padding: 10px 14px 12px;
+    }
+
+    .image-drop-tray {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .image-drop-tray.active {
+      display: flex;
+    }
+
+    .image-thumb-unit {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border-medium);
+    }
+    .image-thumb-unit img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .image-del-btn {
+      position: absolute;
+      top: 1px;
+      right: 1px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-size: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .machined-input-cell {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-md);
+      padding: 8px 10px;
+      box-shadow: var(--shadow-bevel);
+      transition: border-color var(--duration) var(--ease);
+    }
+    .machined-input-cell:focus-within {
+      border-color: var(--bili);
+    }
+
+    .chat-composer-area {
+      width: 100%;
+      resize: none;
+      max-height: 80px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: var(--text-hero);
+    }
+    .chat-composer-area::placeholder {
+      color: var(--text-muted);
+    }
+
+    .composer-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 5px;
+      padding-top: 4px;
+      border-top: 1px solid var(--border-hairline);
+    }
+
+    .composer-left-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .composer-icon-btn {
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: var(--r-sm);
+      transition: all var(--duration) var(--ease);
+    }
+    .composer-icon-btn:hover {
+      color: var(--text-hero);
+      background: var(--bg-surface-hover);
+    }
+
+    .composer-shortcut {
+      font-size: 10.5px;
+      color: var(--text-muted);
+    }
+
+    .composer-send-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 5px;
+      background: var(--bili);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--duration) var(--ease);
+    }
+    .composer-send-btn:hover {
+      background: var(--bili-hover);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 原型顶部控制栏 -->
+  <header class="hud-bar">
+    <div class="hud-title-wrap">
+      <span>BiliLens 侧边栏设计</span>
+      <span class="hud-style-tag">精密社论风格 · 原位触控版</span>
+    </div>
+
+    <div class="hud-controls">
+      <div class="hud-pill-box">
+        <button class="hud-pill-btn active" id="btnModeFull" onclick="toggleSoloMode(false)">伴随播放器</button>
+        <button class="hud-pill-btn" id="btnModeSolo" onclick="toggleSoloMode(true)">独立侧边栏</button>
+      </div>
+
+      <div class="hud-pill-box">
+        <button class="hud-pill-btn active" id="btnThemeDark" onclick="toggleTheme('dark')">曜石深色</button>
+        <button class="hud-pill-btn" id="btnThemeLight" onclick="toggleTheme('light')">纸本浅色</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主舞台 -->
+  <main class="deck-stage">
+
+    <!-- 1. 左侧模拟播放器：检验时间戳点击联动（画面与进度条即是最好反馈） -->
+    <section class="sim-screen-deck">
+      <div class="sim-viewport-player">
+        <div class="sim-center-beacon">
+          <div class="sim-play-trigger" onclick="toggleSimPlay()">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+          <div class="sim-beacon-toast" id="simStatusTip">点击右侧时间戳，视频进度静默同步</div>
+        </div>
+
+        <div class="sim-player-bar">
+          <div class="sim-scrub-lane" onclick="onScrubVideo(event)">
+            <div class="sim-scrub-progress" id="simFill">
+              <div class="sim-scrub-pin"></div>
+            </div>
+          </div>
+          <div class="sim-time-stats">
+            <span id="simCurTime">01:42</span>
+            <span>18:35</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sim-info-pane">
+        <h1 class="sim-headline">用 AI 重构学习方法论：从单兵作战到超维度知识图谱</h1>
+        <div class="sim-meta-row">
+          <span>UP主：思维漫步者</span>
+          <span>BV1u7411P7zK</span>
+          <span>时长：18:35</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 右侧核心侧边栏实体 (388px 标准宽度) -->
+    <aside class="sidepanel-shell" id="spFrame">
+
+      <!-- 顶栏：视频信息与快捷入口 -->
+      <div class="sp-header-dock">
+        <div class="sp-brand-row">
+          <div class="sp-brand-badge-group">
+            <span class="sp-monogram">B</span>
+            <span class="sp-product-title">BiliLens</span>
+          </div>
+          <div class="sp-tools-cluster">
+            <button class="sp-icon-button" id="btnObsidian" title="直写到 Obsidian" onclick="onObsidianClick(this)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+            </button>
+            <button class="sp-icon-button" title="设置">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="sp-video-anchor-box">
+          <img class="sp-anchor-thumb" src="https://picsum.photos/seed/bili/92/60" alt="封面" />
+          <div class="sp-anchor-meta">
+            <div class="sp-anchor-title">用 AI 重构学习方法论：从单兵作战到超维度知识图谱</div>
+            <div class="sp-anchor-sub">
+              <span class="sp-status-chip">官方总结 + 字幕已同步</span>
+              <span>· 18:35</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 核心双模切换：目录 vs 聊天 -->
+      <div class="sp-tab-deck">
+        <div class="machined-segmented">
+          <div class="machined-slider" id="segSlider"></div>
+          <button class="machined-tab-btn active" id="btnTabNote" onclick="switchTab('note')">
+            <span>目录</span>
+            <span class="machined-counter">4章</span>
+          </button>
+          <button class="machined-tab-btn" id="btnTabChat" onclick="switchTab('chat')">
+            <span>聊天</span>
+            <span class="machined-counter">2轮</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 滚动视口 -->
+      <div class="sp-scroll-view" id="scrollport">
+
+        <!-- ==================== 页面 1：目录（总结 + 提纲） ==================== -->
+        <div class="sp-tab-page active" id="pageNote">
+          <!-- 核心摘要卡 -->
+          <div class="executive-card">
+            <div class="executive-lead">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <span>EXECUTIVE SUMMARY · 核心摘要</span>
+            </div>
+            <p class="executive-text">
+              视频推导了现代知识工作的瓶颈：传统教学的多对多关系导致认知摩擦与信任观望。提出将 AI 作为<strong>聚合多来源的单一交互界面</strong>，内置事实验证以工程化确立信任，将单向灌输升级为双向高频对抗。
+            </p>
+          </div>
+
+          <!-- 精密时序导轨系统 -->
+          <div class="editorial-timeline" id="editorialTimeline">
+            <!-- 贯穿导轨底线与动态填充层 -->
+            <div class="timeline-spine-bg"></div>
+            <div class="timeline-spine-fill" id="railTrack"></div>
+
+            <!-- 章节 1 (已播章节) -->
+            <div class="timeline-chapter visited" id="ch-0">
+              <div class="timeline-node-slot" onclick="jumpTo(1)" title="跳转到 00:01">
+                <div class="timeline-node-pin">
+                  <span class="node-active-glyph">
+                    <svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6 3 20 12 6 21 6 3"/>
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <div class="timeline-card" onclick="jumpTo(1)">
+                <div class="timeline-header">
+                  <span class="timeline-time">00:01</span>
+                  <h4 class="timeline-title">学习效能的边界与系统目标</h4>
+                  <span class="timeline-live-tag">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    播放中
+                  </span>
+                </div>
+                <div class="timeline-body">
+                  <div class="timeline-item">
+                    <span class="item-tag">底层痛点</span>
+                    <span class="item-desc">传统教学体系中，学习者疲于适应不同教具与教材的差异化符号系统。</span>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="item-tag">系统逻辑</span>
+                    <span class="item-desc">先论证工程化信任的架构原理，后半程在 Obsidian 中现场推演。</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 章节 2 (当前正在播放) -->
+            <div class="timeline-chapter current" id="ch-1">
+              <div class="timeline-node-slot" onclick="jumpTo(102)" title="跳转到 01:42">
+                <div class="timeline-node-pin">
+                  <span class="node-active-glyph">
+                    <svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6 3 20 12 6 21 6 3"/>
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <div class="timeline-card" onclick="jumpTo(102)">
+                <div class="timeline-header">
+                  <span class="timeline-time">01:42</span>
+                  <h4 class="timeline-title">多来源学习的认知成本与信任成本</h4>
+                  <span class="timeline-live-tag">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    播放中
+                  </span>
+                </div>
+                <div class="timeline-body">
+                  <div class="timeline-item">
+                    <span class="item-tag">认知耗损</span>
+                    <span class="item-desc">在不同来源间频繁切换上下文会导致大脑工作记忆超载。</span>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="item-tag">信任危机</span>
+                    <span class="item-desc">面对陌生的知识源，人会本能保持审慎观望，大幅拖慢吸收速度。</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 章节 3 -->
+            <div class="timeline-chapter" id="ch-2">
+              <div class="timeline-node-slot" onclick="jumpTo(195)" title="跳转到 03:15">
+                <div class="timeline-node-pin">
+                  <span class="node-active-glyph">
+                    <svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6 3 20 12 6 21 6 3"/>
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <div class="timeline-card" onclick="jumpTo(195)">
+                <div class="timeline-header">
+                  <span class="timeline-time">03:15</span>
+                  <h4 class="timeline-title">一对一、聚合来源与工程化信任</h4>
+                  <span class="timeline-live-tag">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    播放中
+                  </span>
+                </div>
+                <div class="timeline-body">
+                  <div class="timeline-item">
+                    <span class="item-tag">单一界面</span>
+                    <span class="item-desc">单一 AI 界面不代表单一信源，而是将千万条原始信息收敛为一致的交互协议。</span>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="item-tag">反驳误区</span>
+                    <span class="item-desc">打破“单一老师造成思维定势”的传统认知错觉。</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 章节 4 -->
+            <div class="timeline-chapter" id="ch-3">
+              <div class="timeline-node-slot" onclick="jumpTo(900)" title="跳转到 15:00">
+                <div class="timeline-node-pin">
+                  <span class="node-active-glyph">
+                    <svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6 3 20 12 6 21 6 3"/>
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <div class="timeline-card" onclick="jumpTo(900)">
+                <div class="timeline-header">
+                  <span class="timeline-time">15:00</span>
+                  <h4 class="timeline-title">现场推演：微分形式与知识图谱的生长</h4>
+                  <span class="timeline-live-tag">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    播放中
+                  </span>
+                </div>
+                <div class="timeline-body">
+                  <div class="timeline-item">
+                    <span class="item-tag">后勤最小化</span>
+                    <span class="item-desc">把心智全部聚焦在核心概念本身，将笔记组织完全托付给结构化工具。</span>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="item-tag">即时验证</span>
+                    <span class="item-desc">通过时间戳回放对齐模糊概念，形成自验证闭环。</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ==================== 页面 2：聊天（字幕伴读） ==================== -->
+        <div class="sp-tab-page" id="pageChat">
+          <!-- 播放位置开关栏 -->
+          <div class="playhead-sync-panel">
+            <div class="sync-status-group">
+              <span class="sync-signal-dot"></span>
+              <span>附带当前播放位置</span>
+              <span class="sync-time-badge" id="chatPlayheadTime">01:42</span>
+            </div>
+            <div class="tactile-switch active" id="playheadSwitch" onclick="togglePlayheadSwitch()">
+              <div class="tactile-knob"></div>
+            </div>
+          </div>
+
+          <!-- 消息流 -->
+          <div class="dialogue-thread" id="chatMessages">
+
+            <!-- 问 1 -->
+            <div class="dialogue-user-row">
+              <div class="dialogue-user-bubble">
+                它到底想说明什么？
+              </div>
+            </div>
+
+            <!-- 答 1 -->
+            <div class="dialogue-assistant-row">
+              <div class="reasoning-accordion" onclick="this.classList.toggle('expanded')">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+                <span>已审阅字幕 · 35,495 tokens · 1.2s</span>
+              </div>
+              <div class="reasoning-panel">
+                定位关键词：「聚合来源」「单一界面」「信任成本」。在 01:42 和 03:15 处论证核心主张。
+              </div>
+
+              <div class="dialogue-assistant-body">
+                <p>核心主张是：AI 应该充当<strong>聚合多来源的单一界面</strong>，而不是又一个老师。</p>
+                <p>它给出的核心理由是：</p>
+                <ul>
+                  <li>学生的认知成本主要来自适应不同风格与界面 <span class="chronograph-pill" onclick="jumpTo(102)">01:42</span></li>
+                  <li>更深的成本是信任——面对陌生来源会本能观望 <span class="chronograph-pill" onclick="jumpTo(102)">01:42</span></li>
+                  <li>因此信任不能靠慢慢建立，而要工程化内置 <span class="chronograph-pill" onclick="jumpTo(195)">03:15</span></li>
+                </ul>
+                <p>所以它不是「用一个 AI 取代老师」，而是把来源数量与界面数量解耦。</p>
+              </div>
+            </div>
+
+            <!-- 问 2 (带粘贴图片) -->
+            <div class="dialogue-user-row">
+              <div class="dialogue-user-bubble">
+                <img class="dialogue-user-image" src="https://picsum.photos/seed/slide/200/130" alt="截图" />
+                15 分钟演示那里讲了什么？
+              </div>
+            </div>
+
+            <!-- 答 2 -->
+            <div class="dialogue-assistant-row">
+              <div class="dialogue-assistant-body">
+                <p>
+                  那里在做现场演示，用 Obsidian 配合模型学习微分形式 <span class="chronograph-pill" onclick="jumpTo(900)">15:00</span>，重点是把精力放在材料本身而不是后勤。
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- 固定底舱容器（完全脱离内部滚动层与页面切换动画，杜绝任何位移与跳动） -->
+      <div class="sp-bottom-dock-container">
+        <!-- 目录态底栏 -->
+        <div class="sp-dock-footer" id="dockFooterNote">
+          <button class="machined-btn-primary" onclick="simulateRegenerate()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>重新生成精读</span>
+          </button>
+          <button class="machined-btn-ghost" id="btnCopyMD" onclick="onCopyClick(this)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span id="btnCopyText">复制 MD</span>
+          </button>
+        </div>
+
+        <!-- 聊天输入底舱 -->
+        <div class="chat-input-dock" id="dockInputChat" style="display: none;">
+          <div class="image-drop-tray" id="pasteTray">
+            <div class="image-thumb-unit">
+              <img src="https://picsum.photos/seed/thumb/80/80" alt="截图" />
+              <button class="image-del-btn" onclick="clearPastedImage()">×</button>
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted);">已等比降采样至 1280px</span>
+          </div>
+
+          <div class="machined-input-cell">
+            <textarea
+              class="chat-composer-area"
+              id="chatInput"
+              rows="2"
+              placeholder="针对本视频提问…（支持 Ctrl+V 粘贴截图）"
+              onkeydown="onInputKey(event)"
+            ></textarea>
+
+            <div class="composer-toolbar">
+              <div class="composer-left-tools">
+                <button class="composer-icon-btn" title="模拟粘贴截图" onclick="simulatePaste()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </button>
+                <span class="composer-shortcut">Enter 发送 · Shift+Enter 换行</span>
+              </div>
+
+              <button class="composer-send-btn" title="发送" onclick="sendMessage()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <script>
+    const state = {
+      seconds: 102,
+      duration: 1115,
+      playing: false,
+      tab: 'note',
+      sendPlayhead: true,
+      hasImage: false
+    };
+
+    function formatTime(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    }
+
+    // 视频跳转与导轨/标尺状态更新（无多余弹层，画面自身即反馈）
+    function jumpTo(sec) {
+      state.seconds = sec;
+      updateVideoUI();
+      highlightActiveChapter(sec);
+    }
+
+    function updateVideoUI() {
+      const pct = (state.seconds / state.duration) * 100;
+      document.getElementById('simFill').style.width = `${pct}%`;
+      const t = formatTime(state.seconds);
+      document.getElementById('simCurTime').textContent = t;
+      document.getElementById('chatPlayheadTime').textContent = t;
+      document.getElementById('simStatusTip').textContent = `已跳转到 ${t}`;
+    }
+
+    function highlightActiveChapter(sec) {
+      const chapters = [
+        { id: 'ch-0', sec: 1 },
+        { id: 'ch-1', sec: 102 },
+        { id: 'ch-2', sec: 195 },
+        { id: 'ch-3', sec: 900 }
+      ];
+
+      let activeIdx = 0;
+      for (let i = chapters.length - 1; i >= 0; i--) {
+        if (sec >= chapters[i].sec) {
+          activeIdx = i;
+          break;
+        }
+      }
+
+      chapters.forEach((ch, idx) => {
+        const el = document.getElementById(ch.id);
+        if (!el) return;
+        if (idx === activeIdx) {
+          el.classList.add('current');
+          el.classList.remove('visited');
+        } else if (idx < activeIdx) {
+          el.classList.remove('current');
+          el.classList.add('visited');
+        } else {
+          el.classList.remove('current');
+          el.classList.remove('visited');
+        }
+      });
+
+      // 动态将导轨高亮高度精确对齐至当前激活节点的几何中心
+      const activeEl = document.getElementById(chapters[activeIdx].id);
+      const trackFill = document.getElementById('railTrack');
+      const spineBg = document.querySelector('.timeline-spine-bg');
+      if (activeEl && trackFill && spineBg) {
+        const nodeSlot = activeEl.querySelector('.timeline-node-slot');
+        if (nodeSlot) {
+          const activeCenterY = activeEl.offsetTop + nodeSlot.offsetTop + (nodeSlot.offsetHeight / 2);
+          const spineTop = spineBg.offsetTop;
+          const fillHeight = Math.max(0, activeCenterY - spineTop);
+          trackFill.style.height = `${fillHeight}px`;
+        }
+      }
+    }
+
+    function onScrubVideo(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      const targetSec = Math.floor(ratio * state.duration);
+      jumpTo(targetSec);
+    }
+
+    let playTimer = null;
+    function toggleSimPlay() {
+      state.playing = !state.playing;
+      const tip = document.getElementById('simStatusTip');
+      if (state.playing) {
+        tip.textContent = '▶ 播放中';
+        playTimer = setInterval(() => {
+          if (state.seconds < state.duration) {
+            state.seconds++;
+            updateVideoUI();
+            highlightActiveChapter(state.seconds);
+          } else {
+            clearInterval(playTimer);
+            state.playing = false;
+          }
+        }, 1000);
+      } else {
+        clearInterval(playTimer);
+        tip.textContent = '⏸ 已暂停';
+      }
+    }
+
+    function switchTab(t) {
+      state.tab = t;
+      const slider = document.getElementById('segSlider');
+      const btnNote = document.getElementById('btnTabNote');
+      const btnChat = document.getElementById('btnTabChat');
+      const pageNote = document.getElementById('pageNote');
+      const pageChat = document.getElementById('pageChat');
+      const dockNote = document.getElementById('dockFooterNote');
+      const dockChat = document.getElementById('dockInputChat');
+
+      if (t === 'note') {
+        slider.style.transform = 'translateX(0)';
+        btnNote.classList.add('active');
+        btnChat.classList.remove('active');
+        pageNote.classList.add('active');
+        pageChat.classList.remove('active');
+        if (dockNote && dockChat) {
+          dockNote.style.display = 'flex';
+          dockChat.style.display = 'none';
+        }
+      } else {
+        slider.style.transform = 'translateX(100%)';
+        btnChat.classList.add('active');
+        btnNote.classList.remove('active');
+        pageChat.classList.add('active');
+        pageNote.classList.remove('active');
+        if (dockNote && dockChat) {
+          dockNote.style.display = 'none';
+          dockChat.style.display = 'block';
+        }
+        const input = document.getElementById('chatInput');
+        if (input) {
+          setTimeout(() => input.focus({ preventScroll: true }), 40);
+        }
+      }
+    }
+
+    function togglePlayheadSwitch() {
+      state.sendPlayhead = !state.sendPlayhead;
+      const sw = document.getElementById('playheadSwitch');
+      sw.classList.toggle('active', state.sendPlayhead);
+    }
+
+    function simulatePaste() {
+      state.hasImage = true;
+      document.getElementById('pasteTray').classList.add('active');
+    }
+
+    function clearPastedImage() {
+      state.hasImage = false;
+      document.getElementById('pasteTray').classList.remove('active');
+    }
+
+    function onInputKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text && !state.hasImage) return;
+
+      const chatList = document.getElementById('chatMessages');
+
+      const userRow = document.createElement('div');
+      userRow.className = 'dialogue-user-row';
+      let imgHtml = state.hasImage ? `<img class="dialogue-user-image" src="https://picsum.photos/seed/thumb/160/100" alt="截图" />` : '';
+      userRow.innerHTML = `<div class="dialogue-user-bubble">${imgHtml}${escapeHtml(text)}</div>`;
+      chatList.appendChild(userRow);
+
+      input.value = '';
+      clearPastedImage();
+
+      const scrollport = document.getElementById('scrollport');
+      scrollport.scrollTo({ top: scrollport.scrollHeight, behavior: 'smooth' });
+
+      setTimeout(() => {
+        const botRow = document.createElement('div');
+        botRow.className = 'dialogue-assistant-row';
+        botRow.innerHTML = `
+          <div class="dialogue-assistant-body" id="curStream">
+            <span class="streaming-pulse-cursor"></span>
+          </div>
+        `;
+        chatList.appendChild(botRow);
+
+        const target = botRow.querySelector('#curStream');
+        const replyText = `针对你在 [${formatTime(state.seconds)}] 提到的问题：视频在 03:15 处明确指出，单一界面不等于单一信源，而是将多元信息聚合后在统一协议下输出，因此不仅不会窄化视角，反而能成倍降低核验的时间开销。`;
+
+        let i = 0;
+        const timer = setInterval(() => {
+          if (i < replyText.length) {
+            i += 2;
+            const piece = replyText.substring(0, i);
+            target.innerHTML = parseTimestamps(piece) + `<span class="streaming-pulse-cursor"></span>`;
+            scrollport.scrollTop = scrollport.scrollHeight;
+          } else {
+            clearInterval(timer);
+            target.innerHTML = parseTimestamps(replyText);
+          }
+        }, 30);
+      }, 400);
+    }
+
+    function parseTimestamps(text) {
+      return escapeHtml(text).replace(/(\d{1,2}:\d{2})/g, (match, timeStr) => {
+        const parts = timeStr.split(':');
+        const secs = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        return `<span class="chronograph-pill" onclick="jumpTo(${secs})">${timeStr}</span>`;
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // 原位交互反馈：复制按钮内变状态，不弹窗遮挡
+    function onCopyClick(btn) {
+      btn.classList.add('is-copied');
+      const label = document.getElementById('btnCopyText');
+      const old = label.textContent;
+      label.textContent = '已复制 ✓';
+      setTimeout(() => {
+        btn.classList.remove('is-copied');
+        label.textContent = old;
+      }, 1600);
+    }
+
+    // 原位交互反馈：顶部 Obsidian 按钮原位高亮
+    function onObsidianClick(btn) {
+      btn.classList.add('success-flash');
+      setTimeout(() => btn.classList.remove('success-flash'), 1400);
+    }
+
+    function simulateRegenerate() {
+      // 可以在此处直接触发重新生成动效
+    }
+
+    function toggleSoloMode(isSolo) {
+      document.body.classList.toggle('view-solo', isSolo);
+      document.getElementById('btnModeFull').classList.toggle('active', !isSolo);
+      document.getElementById('btnModeSolo').classList.toggle('active', isSolo);
+    }
+
+    function toggleTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.getElementById('btnThemeDark').classList.toggle('active', theme === 'dark');
+      document.getElementById('btnThemeLight').classList.toggle('active', theme === 'light');
+    }
+
+    // 初始化对齐高精度导轨中轴位置
+    window.addEventListener('DOMContentLoaded', () => {
+      highlightActiveChapter(state.seconds);
+    });
+    // 立即执行一次以防 DOMContentLoaded 已过
+    setTimeout(() => highlightActiveChapter(state.seconds), 50);
+  </script>
+</body>
+</html>

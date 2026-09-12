@@ -1,0 +1,23 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": false,
+    // 显式列出，否则会覆盖默认的自动加载行为而丢掉 node 类型。
+    // 这里不引入 @types/chrome：统一使用 WXT 的 browser API，类型更自洽。
+    "types": ["vitest/globals", "node"]
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.vue",
+    "tests/**/*.ts",
+    ".wxt/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".output"
+  ]
+}

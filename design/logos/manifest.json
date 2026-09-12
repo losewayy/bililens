@@ -1,0 +1,74 @@
+[
+  {
+    "id": "siliconflow",
+    "label": "硅基流动",
+    "simpleicon": null,
+    "domain": "siliconflow.cn",
+    "file": null,
+    "source": null,
+    "bytes": 0
+  },
+  {
+    "id": "deepseek",
+    "label": "DeepSeek",
+    "simpleicon": "deepseek",
+    "domain": "deepseek.com",
+    "file": "deepseek.svg",
+    "source": "simpleicons:deepseek",
+    "bytes": 2101
+  },
+  {
+    "id": "moonshot",
+    "label": "Moonshot",
+    "simpleicon": null,
+    "domain": "moonshot.cn",
+    "file": "moonshot.png",
+    "source": "favicon:moonshot.cn",
+    "bytes": 1664
+  },
+  {
+    "id": "zhipu",
+    "label": "智谱 GLM",
+    "simpleicon": null,
+    "domain": "zhipuai.cn",
+    "file": "zhipu.png",
+    "source": "favicon:zhipuai.cn",
+    "bytes": 1027
+  },
+  {
+    "id": "openrouter",
+    "label": "OpenRouter",
+    "simpleicon": "openrouter",
+    "domain": "openrouter.ai",
+    "file": "openrouter.svg",
+    "source": "simpleicons:openrouter",
+    "bytes": 699
+  },
+  {
+    "id": "openai",
+    "label": "OpenAI",
+    "simpleicon": null,
+    "domain": "openai.com",
+    "file": "openai.png",
+    "source": "favicon:openai.com",
+    "bytes": 1829
+  },
+  {
+    "id": "ollama",
+    "label": "Ollama",
+    "simpleicon": "ollama",
+    "domain": "ollama.com",
+    "file": "ollama.svg",
+    "source": "simpleicons:ollama",
+    "bytes": 4784
+  },
+  {
+    "id": "bilibili",
+    "label": "bilibili",
+    "simpleicon": "bilibili",
+    "domain": "bilibili.com",
+    "file": "bilibili.svg",
+    "source": "simpleicons:bilibili",
+    "bytes": 1396
+  }
+]
