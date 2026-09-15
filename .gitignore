@@ -17,3 +17,4 @@ server/outputs/
 server/models/*
 !server/models/.gitkeep
 *.zip
+HANDOFF.md

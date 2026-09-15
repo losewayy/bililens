@@ -48,11 +48,6 @@ def get_model_dir() -> Path:
     if alt_local.exists() and (alt_local / "tokens.txt").exists():
         return alt_local
 
-    # 本地已有开发环境回退探测
-    dev_fallback = Path(r"D:\worktable\CapsWriter-Offline\models\Fun-ASR-Nano\Fun-ASR-Nano-GGUF")
-    if dev_fallback.exists():
-        return dev_fallback
-
     return local_dir
 
 
