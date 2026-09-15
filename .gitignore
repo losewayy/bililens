@@ -9,3 +9,13 @@ stats.html
 *.local
 dist
 coverage
+
+# 本地 ASR 服务缓存与大模型权重（单文件超 100MB 须由外部/脚本下载）
+server/venv/
+server/.cache/
+server/outputs/
+server/models/*.onnx
+server/models/*.gguf
+server/models/*/*.onnx
+server/models/*/*.gguf
+!server/models/.gitkeep
