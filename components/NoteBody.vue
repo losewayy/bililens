@@ -412,7 +412,7 @@ function onClick(ev: MouseEvent): void {
   border: 1px solid var(--border-subtle);
   border-bottom: none;
   border-radius: var(--r-lg) var(--r-lg) 0 0;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -422,7 +422,7 @@ function onClick(ev: MouseEvent): void {
 
 .note :deep(h2:first-of-type)::before {
   content: 'EXECUTIVE SUMMARY ·';
-  font-size: 10px;
+  font-size: calc(10px * var(--fs));
   color: var(--bili);
   font-weight: 800;
 }
@@ -434,7 +434,7 @@ function onClick(ev: MouseEvent): void {
   border: 1px solid var(--border-subtle);
   border-top: none;
   border-radius: 0 0 var(--r-lg) var(--r-lg);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   color: var(--text-secondary);
   line-height: 1.64;
   box-shadow: var(--shadow-card);
@@ -462,6 +462,7 @@ function onClick(ev: MouseEvent): void {
 
 .note :deep(p) {
   margin: 8px 0;
+  font-size: calc(13px * var(--fs));
   line-height: 1.78;
   color: var(--ink);
 }
@@ -477,8 +478,8 @@ function onClick(ev: MouseEvent): void {
   position: relative;
   margin: 6px 0;
   padding-left: 14px;
-  font-size: 12px;
-  line-height: 1.62;
+  font-size: calc(12.5px * var(--fs));
+  line-height: 1.64;
   color: var(--text-secondary);
 }
 
@@ -486,7 +487,7 @@ function onClick(ev: MouseEvent): void {
   content: '';
   position: absolute;
   left: 2px;
-  top: 9px;
+  top: calc(0.55em + 1px);
   width: 4px;
   height: 1.5px;
   background: var(--border-medium);
@@ -495,6 +496,7 @@ function onClick(ev: MouseEvent): void {
 
 .note :deep(li.sub) {
   margin-left: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-muted);
 }
 

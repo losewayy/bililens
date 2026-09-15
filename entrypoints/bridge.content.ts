@@ -21,6 +21,7 @@
  */
 
 import {
+  fetchAudioStreamUrl,
   fetchConclusion,
   fetchNavStatus,
   fetchSubtitleBody,
@@ -73,12 +74,12 @@ export default defineContentScript({
         return await fetchVideoInfo(href);
       },
 
-      /** 一次性采集：官方总结 + 字幕列表。任一失败不影响另一个 */
+      /** 一次性采集：官方总结 + 字幕列表 + 音频流（本地 ASR 兜底）。任一失败不影响另一个 */
       collect: async () => {
         const href = location.href;
         const info = await fetchVideoInfo(href);
 
-        const [conclusion, subtitles] = await Promise.all([
+        const [conclusion, subtitles, audioUrl] = await Promise.all([
           fetchConclusion(info).catch((e: unknown) => ({
             available: false as const,
             reason: e instanceof Error ? e.message : String(e),
@@ -87,9 +88,10 @@ export default defineContentScript({
             list: [],
             error: e instanceof Error ? e.message : String(e),
           })),
+          fetchAudioStreamUrl(info).catch(() => null),
         ]);
 
-        return { info, conclusion, subtitles };
+        return { info, conclusion, subtitles, audioUrl };
       },
 
       aiConclusion: async (p) => await fetchConclusion(p as VideoIdPayload),

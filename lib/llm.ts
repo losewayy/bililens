@@ -293,6 +293,24 @@ export function buildUserContent(text: string, images?: ChatImage[]): MessageCon
   ];
 }
 
+/**
+ * 根据模型的上下文窗口 (contextWindow) 与单次最大输出 (maxTokens) 动态计算字幕的安全字符预算。
+ *
+ * 【为什么需要自适应预算】
+ * 以前固定写死 90,000 字符（约 45k tokens）。遇到 8k / 16k / 32k 的小上下文模型时会直接报 400
+ * context_length_exceeded；而遇到 128k / 1M 的长上下文模型时，又会白白抽样浪费掉完整字幕。
+ * 本函数预留系统提示、视频元数据与最大输出预算后，按安全字符比例将剩余 Token 换算为字幕字符数。
+ */
+export function calculateTranscriptBudget(contextWindow = 0, maxTokens = 0): number {
+  if (contextWindow <= 0) return 90_000;
+  // 预留系统提示(~1000) + 视频信息提纲(~1500) + 用户任务要求(~500) = 3000 tokens
+  const reservedOutput = maxTokens > 0 ? maxTokens : 4096;
+  const overhead = 3000 + reservedOutput;
+  const availableTokens = Math.max(2000, contextWindow - overhead);
+  // 中文字符在分词中通常 1 token 对应 1.2 ~ 1.5 字符，取保守系数 1.3
+  return Math.max(6_000, Math.floor(availableTokens * 1.3));
+}
+
 /** 字幕转「带时间戳的纯文本」，并在过长时做保持时间轴覆盖的抽样 */
 export function formatTranscript(
   segments: Array<{ from: number; content: string }>,
@@ -319,6 +337,15 @@ export function formatTranscript(
   return `${kept.join('\n')}\n\n（注：原文过长，已按等距抽样压缩，时间轴覆盖保持完整）`;
 }
 
+export interface BuildMaterialOptions {
+  /** 字幕抽样字符上限；留空时根据 contextWindow / maxTokens 自动计算或取默认 90,000 */
+  maxChars?: number;
+  /** 模型上下文窗口（Tokens） */
+  contextWindow?: number;
+  /** 模型单次最大输出（Tokens） */
+  maxTokens?: number;
+}
+
 /**
  * 组装「视频材料」—— 笔记与聊天共用同一份。
  *
@@ -327,7 +354,7 @@ export function formatTranscript(
  * 不仅重复，还会出现「笔记里有的信息聊天里没有」这类不一致。
  * 现在两个入口都调用它，材料完全一致。
  */
-export function buildMaterial(payload: BuildPayload): string {
+export function buildMaterial(payload: BuildPayload, options?: BuildMaterialOptions): string {
   const { info, conclusion, subtitle } = payload;
   const parts: string[] = [];
 
@@ -362,8 +389,13 @@ export function buildMaterial(payload: BuildPayload): string {
   }
 
   if (subtitle?.length) {
+    const budget =
+      typeof options?.maxChars === 'number' && options.maxChars > 0
+        ? options.maxChars
+        : calculateTranscriptBudget(options?.contextWindow ?? 0, options?.maxTokens ?? 0);
+
     parts.push(
-      `# 视频字幕原文（带时间戳，共 ${subtitle.length} 条）\n${formatTranscript(subtitle)}`,
+      `# 视频字幕原文（带时间戳，共 ${subtitle.length} 条）\n${formatTranscript(subtitle, budget)}`,
     );
   }
 
@@ -371,12 +403,15 @@ export function buildMaterial(payload: BuildPayload): string {
 }
 
 /** 组装「生成笔记」的两条消息 */
-export function buildNoteMessages(payload: BuildPayload): ChatMessage[] {
+export function buildNoteMessages(
+  payload: BuildPayload,
+  options?: BuildMaterialOptions,
+): ChatMessage[] {
   return [
     { role: 'system', content: NOTE_SYSTEM },
     {
       role: 'user',
-      content: `${buildMaterial(payload)}\n\n# 任务\n请把上面这个视频整理成结构化中文笔记，严格按系统提示的输出格式。`,
+      content: `${buildMaterial(payload, options)}\n\n# 任务\n请把上面这个视频整理成结构化中文笔记，严格按系统提示的输出格式。`,
     },
   ];
 }
@@ -403,7 +438,7 @@ export interface ChatTurn {
  */
 const IMAGE_KEEP_TURNS = 2;
 
-export interface BuildChatOptions {
+export interface BuildChatOptions extends BuildMaterialOptions {
   /** 当前播放位置（秒）。为 null 表示用户关闭了「附带播放位置」 */
   playhead?: number | null;
 }
@@ -440,7 +475,7 @@ export function buildChatMessages(
   history: ChatTurn[],
   options: BuildChatOptions = {},
 ): ChatMessage[] {
-  const material = buildMaterial(payload);
+  const material = buildMaterial(payload, options);
 
   const msgs: ChatMessage[] = [
     { role: 'system', content: CHAT_SYSTEM },
@@ -632,21 +667,75 @@ export class SseParser {
   }
 }
 
+export function getProviderLabel(providerId?: string): string {
+  const hit = PROVIDER_PRESETS.find((p) => p.id === providerId);
+  return hit ? hit.label : providerId || '大模型服务商';
+}
+
+export function isLocalEndpoint(urlOrBase: string): boolean {
+  return /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/i.test(urlOrBase);
+}
+
+export type LlmErrorCode =
+  | 'NOT_CONFIGURED'     // 忘配置模型或关键信息（API Key / 模型名）
+  | 'NETWORK_ERROR'      // 无法连接（本地未启动服务或云端网络不可达）
+  | 'AUTH_ERROR'         // 401 / 403 API Key 无效或未授权
+  | 'NOT_FOUND'          // 404 端点路径错误
+  | 'RATE_LIMIT'         // 429 配额用尽或限流
+  | 'SERVER_ERROR'       // 500/502/503/504 服务商宕机或内部错误
+  | 'BAD_REQUEST'        // 400 参数格式或多模态/上下文超限
+  | 'UNKNOWN';
+
 export class LlmError extends Error {
   constructor(
     message: string,
     readonly status?: number,
     readonly detail?: string,
+    readonly code: LlmErrorCode = 'UNKNOWN',
+    readonly providerLabel?: string,
   ) {
     super(message);
     this.name = 'LlmError';
   }
 }
 
-function buildRequest(cfg: LlmConfig, messages: ChatMessage[]): { url: string; init: RequestInit } {
+function buildRequest(cfg: LlmConfig, messages: ChatMessage[]): {
+  url: string;
+  init: RequestInit;
+  providerLabel: string;
+} {
+  const providerLabel = getProviderLabel(cfg.provider);
   const base = normalizeBaseURL(cfg.baseURL);
-  if (!base) throw new LlmError('尚未配置 API 地址，请打开插件设置填写');
-  if (!cfg.model.trim()) throw new LlmError('尚未配置模型名称，请打开插件设置填写');
+  if (!base) {
+    throw new LlmError(
+      '尚未配置 API 地址。请打开插件设置选择服务商并填写 API 地址。',
+      undefined,
+      undefined,
+      'NOT_CONFIGURED',
+      providerLabel,
+    );
+  }
+  if (!cfg.model.trim()) {
+    throw new LlmError(
+      '尚未配置模型名称。请打开插件设置填写或选择要使用的模型。',
+      undefined,
+      undefined,
+      'NOT_CONFIGURED',
+      providerLabel,
+    );
+  }
+
+  // 云端服务商但未填写 API Key 检查
+  const isCloud = cfg.provider && cfg.provider !== 'ollama' && cfg.provider !== 'custom';
+  if (isCloud && !cfg.apiKey.trim()) {
+    throw new LlmError(
+      `服务商「${providerLabel}」尚未配置 API Key。请前往设置页填入有效密钥后再使用。`,
+      undefined,
+      undefined,
+      'NOT_CONFIGURED',
+      providerLabel,
+    );
+  }
 
   const url = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
 
@@ -667,6 +756,7 @@ function buildRequest(cfg: LlmConfig, messages: ChatMessage[]): { url: string; i
   return {
     url,
     init: { method: 'POST', headers, body: JSON.stringify(body) },
+    providerLabel,
   };
 }
 
@@ -679,21 +769,36 @@ export async function streamChat(
   messages: ChatMessage[],
   cb: StreamCallbacks,
 ): Promise<string> {
-  const { url, init } = buildRequest(cfg, messages);
+  const { url, init, providerLabel } = buildRequest(cfg, messages);
   if (cb.signal) init.signal = cb.signal;
 
   let resp: Response;
   try {
     resp = await fetch(url, init);
   } catch (e) {
-    // 网络层失败最常见的原因：未授权该域名 / 地址写错 / CORS
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw e;
+    }
     const msg = e instanceof Error ? e.message : String(e);
-    if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+    if (/Failed to fetch|NetworkError|Load failed|ERR_CONNECTION_REFUSED/i.test(msg)) {
+      if (isLocalEndpoint(url)) {
+        throw new LlmError(
+          `无法连接本地模型服务（${url}）。\n请检查：本地大模型程序（如 Ollama / LM Studio / vLLM）是否已开启并正常监听对应端口。`,
+          undefined,
+          msg,
+          'NETWORK_ERROR',
+          providerLabel,
+        );
+      }
       throw new LlmError(
-        `无法连接模型服务（${url}）。请检查：① API 地址是否正确 ② 是否已授权该域名 ③ 网络是否可达`,
+        `无法连接大模型服务商「${providerLabel}」（${url}）。\n请检查：① 本地网络连接或代理是否正常 ② 服务商服务器是否正常在线。`,
+        undefined,
+        msg,
+        'NETWORK_ERROR',
+        providerLabel,
       );
     }
-    throw new LlmError(msg);
+    throw new LlmError(`网络请求异常: ${msg}`, undefined, msg, 'NETWORK_ERROR', providerLabel);
   }
 
   if (!resp.ok) {
@@ -703,17 +808,34 @@ export async function streamChat(
     } catch {
       /* 忽略 */
     }
-    const hint =
-      resp.status === 401
-        ? '（API Key 无效或未填写）'
-        : resp.status === 404
-          ? '（地址可能少写或多写了 /v1）'
-          : resp.status === 429
-            ? '（触发限流，请稍后再试）'
-            : resp.status === 400 && /image|vision|multimodal|content/i.test(detail)
-              ? '（该模型可能不支持图像输入：若你粘贴了图片，请到设置里关闭「支持图像输入」后重试）'
-              : '';
-    throw new LlmError(`请求失败 HTTP ${resp.status}${hint}`, resp.status, detail);
+
+    let code: LlmErrorCode = 'UNKNOWN';
+    let hint = '';
+
+    if (resp.status === 401 || resp.status === 403) {
+      code = 'AUTH_ERROR';
+      hint = `服务商「${providerLabel}」鉴权失败 (HTTP ${resp.status})：API Key 无效、已过期或余额不足。请前往「设置」检查您的 API Key 并确认账户额度。`;
+    } else if (resp.status === 404) {
+      code = 'NOT_FOUND';
+      hint = `服务商「${providerLabel}」端点未找到 (HTTP 404)：请求地址（${url}）错误，请检查设置中 API 地址是否有多写或遗漏 /v1 等路径。`;
+    } else if (resp.status === 429) {
+      code = 'RATE_LIMIT';
+      hint = `服务商「${providerLabel}」请求过于频繁或配额耗尽 (HTTP 429)：已触发服务商速率限制，请稍后重试或前往服务商控制台查询账户额度。`;
+    } else if (resp.status >= 500 && resp.status <= 599) {
+      code = 'SERVER_ERROR';
+      hint = `大模型服务商「${providerLabel}」服务端异常 (HTTP ${resp.status})：服务商当前可能过载或临时故障，请稍后重试或前往「设置」切换其他可用模型。`;
+    } else if (resp.status === 400 && /context|length|token|maximum context/i.test(detail)) {
+      code = 'BAD_REQUEST';
+      hint = `服务商「${providerLabel}」提示上下文超长 (HTTP 400)：内容超出模型单次最大窗口，请在设置中适当调小上下文窗口或换用更大上下文的模型。`;
+    } else if (resp.status === 400 && /image|vision|multimodal|content/i.test(detail)) {
+      code = 'BAD_REQUEST';
+      hint = `模型「${cfg.model}」可能不支持图像输入 (HTTP 400)：若附带了图片，请前往设置确认该模型是否具备视觉能力。`;
+    } else {
+      code = 'BAD_REQUEST';
+      hint = `服务商「${providerLabel}」请求失败 (HTTP ${resp.status})`;
+    }
+
+    throw new LlmError(hint, resp.status, detail, code, providerLabel);
   }
 
   // 极端情况：服务端未返回流，退化读取
@@ -724,7 +846,7 @@ export async function streamChat(
       cb.onDelta(full);
       return full;
     }
-    throw new LlmError('服务端未返回可读流');
+    throw new LlmError('服务端未返回可读流', undefined, undefined, 'SERVER_ERROR', providerLabel);
   }
 
   const reader = resp.body.getReader();
@@ -765,13 +887,49 @@ export async function streamChat(
 /** 拉取模型列表（设置页「测试连接」用） */
 export async function listModels(cfg: Pick<LlmConfig, 'baseURL' | 'apiKey'>): Promise<string[]> {
   const base = normalizeBaseURL(cfg.baseURL);
-  if (!base) throw new LlmError('请先填写 API 地址');
+  if (!base) throw new LlmError('请先填写 API 地址', undefined, undefined, 'NOT_CONFIGURED');
 
   const headers: Record<string, string> = {};
   if (cfg.apiKey.trim()) headers['Authorization'] = `Bearer ${cfg.apiKey.trim()}`;
 
-  const resp = await fetch(`${base}/models`, { headers });
-  if (!resp.ok) throw new LlmError(`HTTP ${resp.status}`, resp.status);
+  let resp: Response;
+  try {
+    resp = await fetch(`${base}/models`, { headers });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/Failed to fetch|NetworkError|Load failed|ERR_CONNECTION_REFUSED/i.test(msg)) {
+      if (isLocalEndpoint(base)) {
+        throw new LlmError(
+          `无法连接本地服务（${base}），请确认本地模型服务已启动并正在监听对应端口`,
+          undefined,
+          msg,
+          'NETWORK_ERROR',
+        );
+      }
+      throw new LlmError(
+        `无法连接到服务商地址（${base}），请检查网络、代理设置或 API 地址是否正确`,
+        undefined,
+        msg,
+        'NETWORK_ERROR',
+      );
+    }
+    throw new LlmError(`网络请求异常: ${msg}`, undefined, msg, 'NETWORK_ERROR');
+  }
+
+  if (!resp.ok) {
+    const hint =
+      resp.status === 401 || resp.status === 403
+        ? '（鉴权失败，请检查 API Key）'
+        : resp.status === 404
+          ? '（端点未找到，该地址可能不支持 /models 接口）'
+          : '';
+    throw new LlmError(
+      `HTTP ${resp.status}${hint}`,
+      resp.status,
+      undefined,
+      resp.status === 401 || resp.status === 403 ? 'AUTH_ERROR' : resp.status === 404 ? 'NOT_FOUND' : 'SERVER_ERROR',
+    );
+  }
 
   const j = (await resp.json()) as { data?: Array<{ id?: string }> };
   return (j.data ?? []).map((m) => m.id ?? '').filter(Boolean);

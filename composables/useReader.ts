@@ -24,6 +24,7 @@ import {
   type ChatImage,
   type CollectResult,
   type Conclusion,
+  type ErrorCategory,
   type Settings,
   type SubtitleSegment,
   type TokenUsage,
@@ -32,16 +33,20 @@ import {
 import {
   buildChatMessages,
   buildNoteMessages,
+  getProviderLabel,
+  isLocalEndpoint,
   streamChat,
   LlmError,
   type ChatMessage,
   type ChatTurn,
 } from '@/lib/llm';
 import { fmtTokens } from '@/lib/time';
+import { requestAsrTranscription, AsrError } from '@/lib/asr';
 import {
   chatTitleFromTurns,
   getCachedNote,
   getChat,
+  loadSettings,
   putCachedNote,
   putChat,
   type StoredChatSession,
@@ -84,7 +89,10 @@ export interface ReaderState {
   /** 笔记的 Markdown */
   markdown: string;
   error: string;
+  errorTitle?: string;
+  errorCategory?: ErrorCategory | null;
   status: string;
+  progressPercent?: number | null;
   model: string;
 }
 
@@ -105,7 +113,10 @@ export function useReader() {
     subtitleSource: '',
     markdown: '',
     error: '',
+    errorTitle: '',
+    errorCategory: null,
     status: '',
+    progressPercent: null,
     model: '',
   });
 
@@ -163,12 +174,12 @@ export function useReader() {
    * ---------------------------------------------------------------- */
 
   async function init(settings: Settings): Promise<void> {
-    patch({ phase: 'loading', error: '', status: '正在读取当前页面…' });
+    patch({ phase: 'loading', error: '', errorTitle: '', errorCategory: null, status: '正在读取当前页面…' });
 
     const tab = await getActiveTab();
     const activeTabId = tab?.id;
     if (activeTabId === undefined) {
-      patch({ phase: 'error', error: '未找到活动标签页' });
+      patch({ phase: 'error', errorTitle: '未找到活动标签页', errorCategory: 'generic', error: '未找到活动标签页' });
       return;
     }
     tabId = activeTabId;
@@ -193,6 +204,8 @@ export function useReader() {
       subtitleSource: '',
       status: '',
       error: '',
+      errorTitle: '',
+      errorCategory: null,
     });
     chat.value = [];
     chatSessions.value = [];
@@ -223,6 +236,8 @@ export function useReader() {
         subtitleCount: 0,
         subtitleSource: '',
         error: '',
+        errorTitle: '',
+        errorCategory: null,
         status: '',
         model: '',
       });
@@ -401,9 +416,50 @@ export function useReader() {
         const hint =
           subtitles.error ?? (conclusion.available ? '' : conclusion.reason) ?? '未知原因';
 
+        // 兜底：若开启了本地 ASR，自动发起转写
+        const currentSettings = await loadSettings();
+        const asrConfig = currentSettings.localAsr;
+        if (asrConfig?.enabled && asrConfig.endpoint) {
+          const asrProgress = (msg: string, percent?: number) => {
+            patch({
+              status: msg,
+              progressPercent: typeof percent === 'number' ? percent : null,
+            });
+            statusCb?.(msg);
+          };
+          asrProgress('未找到官方字幕，正在通过本地 ASR 转写音轨…', 0);
+          try {
+            const segments = await requestAsrTranscription(
+              asrConfig.endpoint,
+              {
+                bvid: fresh.bvid,
+                cid: fresh.cid,
+                audioUrl: res.audioUrl ?? undefined,
+              },
+              asrProgress,
+              asrConfig.timeoutSeconds,
+            );
+            patch({ progressPercent: null });
+            if (segments.length > 0) {
+              const data: Material = {
+                info: fresh,
+                conclusion,
+                subtitle: segments,
+                subtitleSource: `本地 ASR 转写 · ${segments.length} 条`,
+              };
+              materialCache = { key, data };
+              return data;
+            }
+          } catch (asrErr) {
+            patch({ progressPercent: null });
+            console.warn('[useReader] 本地 ASR 转写失败，回退到报错提示:', asrErr);
+            throw asrErr;
+          }
+        }
+
         throw new Error(
           `这个视频没有可用的字幕或官方总结（${hint}）。` +
-            `目前可直接处理的视频约占七成，剩余视频需要本地语音转写（规划中）。`,
+            `如需处理无字幕视频，请在设置中开启本地 ASR 服务。`,
         );
       } finally {
         inFlightMaterial = null;
@@ -443,17 +499,32 @@ export function useReader() {
     if (tabId === null) {
       const tab = await getActiveTab();
       if (!tab?.id) {
-        patch({ phase: 'error', error: '未找到活动标签页' });
+        patch({ phase: 'error', errorTitle: '未找到活动标签页', errorCategory: 'generic', error: '未找到活动标签页' });
         return;
       }
       tabId = tab.id;
     }
 
     const cfg = getActiveProfile(settings);
-    if (!cfg?.baseURL || !cfg.model) {
+    if (!cfg?.baseURL || !cfg.model.trim()) {
       patch({
         phase: 'error',
-        error: '尚未配置大模型，请点击右上角「设置」填写 API 地址与模型名。',
+        errorCategory: 'model_not_configured',
+        errorTitle: '大模型未配置',
+        error: '尚未配置大模型。精读笔记与智能问答均需大模型驱动，请点击下方「前往设置」选择服务商并填写模型信息。',
+        status: '',
+      });
+      return;
+    }
+
+    const isCloud = cfg.provider && cfg.provider !== 'ollama' && cfg.provider !== 'custom';
+    if (isCloud && !cfg.apiKey.trim()) {
+      patch({
+        phase: 'error',
+        errorCategory: 'model_not_configured',
+        errorTitle: '未配置 API Key',
+        error: `当前所选服务商「${getProviderLabel(cfg.provider)}」尚未配置 API Key。请点击下方「前往设置」填写密钥后再使用。`,
+        status: '',
       });
       return;
     }
@@ -466,12 +537,63 @@ export function useReader() {
         phase: 'collecting',
         markdown: '',
         error: '',
+        errorTitle: '',
+        errorCategory: null,
         status: '正在获取素材…',
         subtitleCount: 0,
         subtitleSource: '',
       });
 
-      const material = await ensureMaterial((s) => patch({ status: s }));
+      let material: Material;
+      try {
+        material = await ensureMaterial((s) => patch({ status: s }));
+      } catch (materialErr) {
+        if (materialErr instanceof DOMException && materialErr.name === 'AbortError') {
+          patch({ phase: 'done', status: '已停止' });
+          return;
+        }
+
+        if (materialErr instanceof AsrError) {
+          if (materialErr.code === 'ASR_NOT_STARTED') {
+            patch({
+              phase: 'error',
+              errorCategory: 'asr_not_started',
+              errorTitle: '本地 ASR 服务未开启',
+              error: `${materialErr.message}\n\n💡 操作指引：请在本地运行 start-server.ps1 启动服务（默认监听端口 18765），开启后再点击下方「重试」。`,
+              status: '',
+            });
+            return;
+          }
+          if (materialErr.code === 'ASR_TIMEOUT') {
+            patch({
+              phase: 'error',
+              errorCategory: 'asr_error',
+              errorTitle: '本地 ASR 转写超时',
+              error: materialErr.message,
+              status: '',
+            });
+            return;
+          }
+          patch({
+            phase: 'error',
+            errorCategory: 'asr_error',
+            errorTitle: '本地 ASR 转写异常',
+            error: materialErr.message,
+            status: '',
+          });
+          return;
+        }
+
+        patch({
+          phase: 'error',
+          errorCategory: 'no_subtitle',
+          errorTitle: '该视频无可用字幕',
+          error: errText(materialErr),
+          status: '',
+        });
+        return;
+      }
+
       currentKey = `${material.info.bvid}:${material.info.cid}`;
 
       patch({
@@ -481,49 +603,90 @@ export function useReader() {
         subtitleCount: material.subtitle.length,
         subtitleSource: material.subtitleSource,
         model: cfg.model,
-        status: `已取得 ${material.subtitleSource}，正在生成笔记…`,
+        status: `已成功同步 ${material.subtitleSource}，正在通过大模型生成笔记…`,
       });
 
-      const messages = buildNoteMessages(toPayload(material));
+      try {
+        const messages = buildNoteMessages(toPayload(material), {
+          contextWindow: cfg.contextWindow,
+          maxTokens: cfg.maxTokens,
+        });
 
-      let acc = '';
-      // 用对象包一层：TS 无法追踪「回调里给 let 赋值」的控制流
-      const gotUsage: { current: TokenUsage | null } = { current: null };
-      const full = await streamChat(cfg, messages, {
-        signal: noteController.signal,
-        onDelta: (delta) => {
-          acc += delta;
-          // 每 40 字符刷一次，兼顾流畅与渲染开销
-          if (acc.length % 40 < delta.length) patch({ markdown: acc });
-        },
-        onUsage: (u) => (gotUsage.current = u),
-      });
+        let acc = '';
+        // 用对象包一层：TS 无法追踪「回调里给 let 赋值」的控制流
+        const gotUsage: { current: TokenUsage | null } = { current: null };
+        const full = await streamChat(cfg, messages, {
+          signal: noteController.signal,
+          onDelta: (delta) => {
+            acc += delta;
+            // 每 40 字符刷一次，兼顾流畅与渲染开销
+            if (acc.length % 40 < delta.length) patch({ markdown: acc });
+          },
+          onUsage: (u) => (gotUsage.current = u),
+        });
 
-      const usage = gotUsage.current;
-      const finalText = full || acc;
-      patch({
-        phase: 'done',
-        markdown: finalText,
-        status: usage
-          ? `完成 · 输入 ${fmtTokens(usage.promptTokens)} · 输出 ${fmtTokens(usage.completionTokens)} tokens`
-          : '完成',
-      });
+        const usage = gotUsage.current;
+        const finalText = full || acc;
+        patch({
+          phase: 'done',
+          markdown: finalText,
+          status: usage
+            ? `完成 · 输入 ${fmtTokens(usage.promptTokens)} · 输出 ${fmtTokens(usage.completionTokens)} tokens`
+            : '完成',
+        });
 
-      await putCachedNote({
-        bvid: material.info.bvid,
-        cid: material.info.cid,
-        title: material.info.title,
-        upName: material.info.upName,
-        markdown: finalText,
-        createdAt: Date.now(),
-        model: cfg.model,
-      });
-    } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === 'AbortError') {
-        patch({ phase: 'done', status: '已停止生成' });
-        return;
+        await putCachedNote({
+          bvid: material.info.bvid,
+          cid: material.info.cid,
+          title: material.info.title,
+          upName: material.info.upName,
+          markdown: finalText,
+          createdAt: Date.now(),
+          model: cfg.model,
+        });
+      } catch (llmErr) {
+        if (llmErr instanceof DOMException && llmErr.name === 'AbortError') {
+          patch({ phase: 'done', status: '已停止生成' });
+          return;
+        }
+
+        let cat: ErrorCategory = 'provider_error';
+        let title = '大模型服务商异常';
+        let advice = '请前往服务商控制台核查服务运行状态、API Key 是否有效及账户可用余额。';
+
+        if (llmErr instanceof LlmError) {
+          if (llmErr.code === 'NOT_CONFIGURED') {
+            cat = 'model_not_configured';
+            title = '大模型未配置';
+            advice = '请点击下方「前往设置」填写模型服务商及密钥。';
+          } else if (llmErr.code === 'NETWORK_ERROR') {
+            title = isLocalEndpoint(cfg.baseURL) ? '本地模型服务未开启' : '大模型服务商无法连接';
+            advice = isLocalEndpoint(cfg.baseURL)
+              ? '请确认本地大模型程序（如 Ollama / LM Studio 等）已启动并正在监听对应端口。'
+              : '请排查本地网络、代理或大模型服务商官方服务器可用性。';
+          } else if (llmErr.code === 'AUTH_ERROR') {
+            title = '大模型鉴权失败';
+            advice = 'API Key 无效、已过期或余额不足，请前往「设置」检查您的 API Key 并核实账户。';
+          } else if (llmErr.code === 'RATE_LIMIT') {
+            title = '大模型请求限流 (429)';
+            advice = '触发服务商速率限制或配额已耗尽，请稍后再试或前往服务商平台查询。';
+          } else if (llmErr.code === 'SERVER_ERROR') {
+            title = '大模型服务商故障 (5xx)';
+            advice = '服务商服务器出现临时故障或过载，建议稍后重试或在设置中切换为其他服务商。';
+          } else if (llmErr.code === 'NOT_FOUND') {
+            title = '大模型端点错误 (404)';
+            advice = '请在设置中检查 API 地址，确认是否多写或缺少了 /v1 等版本路径。';
+          }
+        }
+
+        patch({
+          phase: 'error',
+          errorCategory: cat,
+          errorTitle: title,
+          error: `字幕已转写就绪（共 ${material.subtitle.length} 条），但连接大模型失败：\n${errText(llmErr)}\n\n💡 排查建议：${advice}`,
+          status: '',
+        });
       }
-      patch({ phase: 'error', error: errText(e), status: '' });
     } finally {
       noteController = null;
     }
@@ -659,11 +822,29 @@ export function useReader() {
     if ((!content && images.length === 0) || chatBusy.value) return;
 
     const cfg = getActiveProfile(settings);
-    if (!cfg?.baseURL || !cfg.model) {
+    if (!cfg?.baseURL || !cfg.model.trim()) {
       chat.value = [
         ...chat.value,
         { role: 'user', content, ...(images.length ? { images } : {}) },
-        { role: 'assistant', content: '', error: '尚未配置大模型，请先到「设置」填写 API 地址与模型名。' },
+        {
+          role: 'assistant',
+          content: '',
+          error: '【大模型未配置】尚未配置大模型。请点击右上角「设置」选择服务商并填写模型信息。',
+        },
+      ];
+      return;
+    }
+
+    const isCloud = cfg.provider && cfg.provider !== 'ollama' && cfg.provider !== 'custom';
+    if (isCloud && !cfg.apiKey.trim()) {
+      chat.value = [
+        ...chat.value,
+        { role: 'user', content, ...(images.length ? { images } : {}) },
+        {
+          role: 'assistant',
+          content: '',
+          error: `【未配置 API Key】当前服务商「${getProviderLabel(cfg.provider)}」尚未填写 API Key，请先前往「设置」配置密钥后再提问。`,
+        },
       ];
       return;
     }
@@ -722,6 +903,8 @@ export function useReader() {
 
       const messages: ChatMessage[] = buildChatMessages(toPayload(material), history, {
         playhead: settings.sendPlayhead ? playhead.value : null,
+        contextWindow: cfg?.contextWindow,
+        maxTokens: cfg?.maxTokens,
       });
 
       // 先放一个空的助手气泡，流式往里填
@@ -775,12 +958,44 @@ export function useReader() {
         await persistChat(material.info.bvid, material.info.cid);
       }
     } catch (e: unknown) {
-      // 去掉那个空的流式气泡，改成错误提示
+      // 去掉那个空的流式气泡，改成分类错误提示
       const cleaned = chat.value.filter((b) => !b.streaming);
       if (e instanceof DOMException && e.name === 'AbortError') {
         chat.value = cleaned;
       } else {
-        chat.value = [...cleaned, { role: 'assistant', content: '', error: errText(e) }];
+        let prefix = '【大模型调用失败】';
+        let tip = '';
+        if (e instanceof LlmError) {
+          if (e.code === 'NOT_CONFIGURED') {
+            prefix = '【大模型未配置】';
+            tip = '\n💡 请前往右上角「设置」配置模型参数与 API Key。';
+          } else if (e.code === 'NETWORK_ERROR') {
+            prefix = isLocalEndpoint(cfg?.baseURL ?? '') ? '【本地模型服务未开启】' : '【大模型服务商无法连接】';
+            tip = isLocalEndpoint(cfg?.baseURL ?? '')
+              ? '\n💡 请检查本地模型服务（如 Ollama / LM Studio）是否已启动并正在监听该端口。'
+              : '\n💡 请排查本地网络、代理设置或服务商平台运行状态。';
+          } else if (e.code === 'AUTH_ERROR') {
+            prefix = '【大模型鉴权失败】';
+            tip = '\n💡 请前往「设置」核对 API Key 是否有效或账户余额是否充足。';
+          } else if (e.code === 'RATE_LIMIT') {
+            prefix = '【大模型请求限流】';
+            tip = '\n💡 触发服务商频率或额度限制，请稍后重试。';
+          } else if (e.code === 'SERVER_ERROR') {
+            prefix = '【大模型服务商故障】';
+            tip = '\n💡 服务商服务器异常，请稍后重试或切换其他服务商。';
+          } else if (e.code === 'NOT_FOUND') {
+            prefix = '【大模型端点错误 (404)】';
+            tip = '\n💡 请在设置中检查 API 地址是否有误（是否多写或少写了 /v1）。';
+          }
+        } else if (e instanceof AsrError) {
+          if (e.code === 'ASR_NOT_STARTED') {
+            prefix = '【本地 ASR 服务未开启】';
+            tip = '\n💡 请运行 start-server.ps1 启动本地语音识别服务（18765 端口）。';
+          } else {
+            prefix = '【本地 ASR 转写异常】';
+          }
+        }
+        chat.value = [...cleaned, { role: 'assistant', content: '', error: `${prefix}\n${errText(e)}${tip}` }];
       }
     } finally {
       chatBusy.value = false;

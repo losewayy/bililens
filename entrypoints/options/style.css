@@ -1,13 +1,15 @@
-/* 选项页样式补充 */
+/* 选项页全局样式 */
 
-/*
- * 这里曾经写的是 var(--bl-bg-subtle) —— 一个并不存在的令牌
- * （theme.css 里的命名是 --paper）。var() 引用了未定义的变量时，
- * 整条 background 声明会失效并回落到初始值，于是页面在深色模式下
- * 依然是白底。这类拼错的变量名不会报错，只会「悄悄不生效」。
- */
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {

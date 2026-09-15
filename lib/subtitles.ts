@@ -7,7 +7,7 @@
  */
 
 import type { SubtitleSegment } from './types';
-import { fmtTime, sanitizeFilename } from './time';
+import { sanitizeFilename } from './time';
 
 /** 秒 → "HH:MM:SS,mmm"（SRT 用逗号做毫秒分隔） */
 function srtTime(sec: number): string {
@@ -50,10 +50,11 @@ export function toVtt(segments: SubtitleSegment[]): string {
   return `WEBVTT\n\n${body}${body ? '\n' : ''}`;
 }
 
-/** 纯文本：与提示词材料里的字幕格式一致（[mm:ss] 内容） */
+/** 纯文本：纯净转录文稿（无时间戳，一行一句） */
 export function toTxt(segments: SubtitleSegment[]): string {
   return usable(segments)
-    .map((seg) => `[${fmtTime(seg.from)}] ${String(seg.content).trim()}`)
+    .map((seg) => String(seg.content).trim())
+    .filter(Boolean)
     .join('\n');
 }
 

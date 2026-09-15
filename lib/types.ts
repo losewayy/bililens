@@ -114,6 +114,7 @@ export interface CollectResult {
   info: VideoInfo;
   conclusion: Conclusion;
   subtitles: SubtitleListResult;
+  audioUrl?: string | null;
 }
 
 /* ================================================================== *
@@ -252,6 +253,29 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+/**
+ * 已配置的模型项（属于某个 Provider Profile）。
+ * 独立记忆该模型的参数：上下文窗口、最大输出、图像支持、温度与思考深度。
+ */
+export interface SavedModelConfig {
+  /** 稳定 id */
+  id: string;
+  /** 模型调用标识，如 "deepseek-chat" 或 "gpt-4o" */
+  model: string;
+  /** 用户自定义显示别名（可选，如 "DeepSeek V3 主力"） */
+  name?: string;
+  /** 上下文窗口大小（Token 数量），0 表示不限制/按默认安全基线 */
+  contextWindow: number;
+  /** 单次最大输出 Token，0 表示不限制 */
+  maxTokens: number;
+  /** 生成多样性，默认 0.3 */
+  temperature: number;
+  /** 思考深度档位 */
+  reasoningEffort: ReasoningEffort;
+  /** 是否支持图像输入（多模态） */
+  supportsVision: boolean;
+}
+
 export interface LlmConfig {
   provider: ProviderId;
   baseURL: string;
@@ -260,6 +284,8 @@ export interface LlmConfig {
   temperature: number;
   /** 0 表示不限制 */
   maxTokens: number;
+  /** 上下文窗口大小（Token 数量），0 表示不限制/按默认安全基线（约 90,000 字符） */
+  contextWindow: number;
   /**
    * 思考深度档位；空串不发送（见 ReasoningEffort 说明）。
    */
@@ -288,6 +314,11 @@ export interface LlmProfile extends LlmConfig {
   id: string;
   /** 用户可改的显示名，默认取服务商名 */
   name: string;
+  /**
+   * 该配置档案（服务商账号）下保存的模型预设列表。
+   * 用户可随时保存多个常用模型，并在界面上一键切换。
+   */
+  models?: SavedModelConfig[];
 }
 
 /** 聊天里粘贴的一张图片。只在本次会话的内存里保留，不落盘 */
@@ -307,6 +338,17 @@ export interface ObsidianConfig {
   filenameTemplate: string;
 }
 
+export interface LocalAsrConfig {
+  /** 是否在官方字幕缺失时自动启用本地 ASR 兜底 */
+  enabled: boolean;
+  /** 本地 ASR 服务转录接口完整 URL */
+  endpoint: string;
+  /** 超时上限（秒） */
+  timeoutSeconds: number;
+  /** 是否在无字幕时全自动转写 */
+  autoFallback: boolean;
+}
+
 export interface Settings {
   /** 已保存的模型配置，可以有多份（云端 / 本地各一份等） */
   profiles: LlmProfile[];
@@ -318,6 +360,8 @@ export interface Settings {
   sendPlayhead: boolean;
   saveMode: SaveMode;
   obsidian: ObsidianConfig;
+  /** 本地 ASR 兜底配置 */
+  localAsr: LocalAsrConfig;
   /** 打开视频页时是否自动开始精读 */
   autoRun: boolean;
   /** 默认总结语言 */
@@ -339,6 +383,12 @@ export const DEFAULT_SETTINGS: Settings = {
     enabled: false,
     subfolder: 'BiliLens',
     filenameTemplate: '{title}',
+  },
+  localAsr: {
+    enabled: true,
+    endpoint: 'http://127.0.0.1:18765/api/transcribe',
+    timeoutSeconds: 180,
+    autoFallback: true,
   },
   autoRun: false,
   language: 'zh',
@@ -373,17 +423,33 @@ export function makeProfile(
   preset: { baseURL: string; model: string },
   name: string,
 ): LlmProfile {
+  const model = preset.model;
+  const initialModel: SavedModelConfig | undefined = model
+    ? {
+        id: newProfileId(),
+        model,
+        name: model,
+        contextWindow: 0,
+        maxTokens: 0,
+        temperature: 0.3,
+        reasoningEffort: '',
+        supportsVision: false,
+      }
+    : undefined;
+
   return {
     id: newProfileId(),
     name,
     provider,
     baseURL: preset.baseURL,
-    model: preset.model,
+    model,
     apiKey: '',
     temperature: 0.3,
     maxTokens: 0,
+    contextWindow: 0,
     reasoningEffort: '',
     supportsVision: false,
+    models: initialModel ? [initialModel] : [],
   };
 }
 
@@ -408,3 +474,14 @@ export class BridgeUnavailableError extends Error {
     this.name = 'BridgeUnavailableError';
   }
 }
+
+/**
+ * 结构化错误分类（用于准确提示问题环节并引导用户处理）
+ */
+export type ErrorCategory =
+  | 'model_not_configured' // 忘配置模型（未选模型、未填 API 地址/模型名、云端未填 API Key）
+  | 'provider_error'       // 模型配置了，但打不通（网络超时、连接被拒、401/403、429、500/502/503/504 等）
+  | 'asr_not_started'      // 本地 ASR 服务未开启（Failed to fetch / Connection refused / 端口未监听）
+  | 'asr_error'            // 本地 ASR 运行异常（转录超时、显存不足 500、解码失败等）
+  | 'no_subtitle'          // 视频无官方字幕且本地 ASR 未启用
+  | 'generic';             // 其它未知或通用错误

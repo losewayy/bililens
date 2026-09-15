@@ -53,8 +53,13 @@ export default defineConfig({
 
     permissions: ['storage', 'sidePanel', 'downloads', 'tabs', 'scripting'],
 
-    // B站接口域名固定，声明在必需权限里
-    host_permissions: ['https://*.bilibili.com/*', 'https://*.hdslb.com/*'],
+    // B站接口域名与本地 ASR 接口，声明在必需权限里
+    host_permissions: [
+      'https://*.bilibili.com/*',
+      'https://*.hdslb.com/*',
+      'http://127.0.0.1/*',
+      'http://localhost/*',
+    ],
 
     // 大模型端点由用户自填（中转站/自建），安装时不知道域名，
     // 因此走 optional_host_permissions + 保存时按需申请

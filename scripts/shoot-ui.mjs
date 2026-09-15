@@ -546,6 +546,14 @@ const fontCheck = await side.evaluate(`
     };
     const before = read();
     document.documentElement.dataset.font = 'huge';
+    // 强制触发重排，确保 Chromium headless 刷新所有后代元素的计算字号
+    const tEl = document.querySelector('.rail__time');
+    if (tEl && tEl.parentNode) {
+      const next = tEl.nextSibling;
+      const parent = tEl.parentNode;
+      parent.removeChild(tEl);
+      parent.insertBefore(tEl, next);
+    }
     const after = read();
     return { before, after };
   })()

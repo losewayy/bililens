@@ -132,8 +132,8 @@ describe('新结构', () => {
   it('★★ 多份配置能存能读，activeProfileId 指向的那份生效', async () => {
     const s = await loadSettings();
     const a = { ...s, profiles: [
-      { id: 'a', name: 'A', provider: 'custom' as const, baseURL: 'http://a.test/v1', apiKey: 'ka', model: 'ma', temperature: 0.3, maxTokens: 0, reasoningEffort: '' as const, supportsVision: false },
-      { id: 'b', name: 'B', provider: 'custom' as const, baseURL: 'http://b.test/v1', apiKey: 'kb', model: 'mb', temperature: 0.3, maxTokens: 0, reasoningEffort: 'high' as const, supportsVision: true },
+      { id: 'a', name: 'A', provider: 'custom' as const, baseURL: 'http://a.test/v1', apiKey: 'ka', model: 'ma', temperature: 0.3, maxTokens: 0, contextWindow: 0, reasoningEffort: '' as const, supportsVision: false },
+      { id: 'b', name: 'B', provider: 'custom' as const, baseURL: 'http://b.test/v1', apiKey: 'kb', model: 'mb', temperature: 0.3, maxTokens: 0, contextWindow: 131072, reasoningEffort: 'high' as const, supportsVision: true },
     ], activeProfileId: 'b' };
     await saveSettings(a);
 
@@ -141,6 +141,7 @@ describe('新结构', () => {
     expect(back.profiles).toHaveLength(2);
     expect(getActiveProfile(back)?.model).toBe('mb');
     expect(getActiveProfile(back)?.supportsVision).toBe(true);
+    expect(getActiveProfile(back)?.contextWindow).toBe(131072);
     // 新字段读写往返后保持原值
     expect(getActiveProfile(back)?.reasoningEffort).toBe('high');
   });
@@ -150,7 +151,7 @@ describe('新结构', () => {
       'settings.v1': {
         ...DEFAULT_SETTINGS,
         profiles: [
-          { id: 'a', name: 'A', provider: 'custom', baseURL: 'http://a.test/v1', apiKey: '', model: 'ma', temperature: 0.3, maxTokens: 0, supportsVision: false },
+          { id: 'a', name: 'A', provider: 'custom', baseURL: 'http://a.test/v1', apiKey: '', model: 'ma', temperature: 0.3, maxTokens: 0, contextWindow: 0, supportsVision: false },
         ],
         activeProfileId: '已经不存在了',
       },
@@ -176,8 +177,12 @@ describe('新结构', () => {
     expect(p.supportsVision).toBe(false);
     expect(p.temperature).toBe(0.3);
     expect(p.baseURL).toBe('https://api.deepseek.com/v1');
-    // 新字段不因旧数据缺它而变成 undefined（否则会被原样发给端点）
+    expect(p.contextWindow).toBe(0);
     expect(p.reasoningEffort).toBe('');
+    // 缺 models 字段时自动将当前 model 种子化为首条已配置模型
+    expect(p.models).toBeDefined();
+    expect(p.models).toHaveLength(1);
+    expect(p.models?.[0]?.model).toBe('deepseek-chat');
   });
 
   it('★ 思考深度：合法档位保留，手工改坏的值收敛为空（不发参数）', async () => {
@@ -185,9 +190,9 @@ describe('新结构', () => {
       'settings.v1': {
         ...DEFAULT_SETTINGS,
         profiles: [
-          { id: 'a', name: 'A', provider: 'custom', baseURL: 'http://a.test/v1', apiKey: '', model: 'ma', temperature: 0.3, maxTokens: 0, reasoningEffort: 'xhigh', supportsVision: false },
-          { id: 'b', name: 'B', provider: 'custom', baseURL: 'http://b.test/v1', apiKey: '', model: 'mb', temperature: 0.3, maxTokens: 0, reasoningEffort: 'ultra', supportsVision: false },
-          { id: 'c', name: 'C', provider: 'custom', baseURL: 'http://c.test/v1', apiKey: '', model: 'mc', temperature: 0.3, maxTokens: 0, reasoningEffort: 'max', supportsVision: false },
+          { id: 'a', name: 'A', provider: 'custom', baseURL: 'http://a.test/v1', apiKey: '', model: 'ma', temperature: 0.3, maxTokens: 0, contextWindow: 0, reasoningEffort: 'xhigh', supportsVision: false },
+          { id: 'b', name: 'B', provider: 'custom', baseURL: 'http://b.test/v1', apiKey: '', model: 'mb', temperature: 0.3, maxTokens: 0, contextWindow: 0, reasoningEffort: 'ultra', supportsVision: false },
+          { id: 'c', name: 'C', provider: 'custom', baseURL: 'http://c.test/v1', apiKey: '', model: 'mc', temperature: 0.3, maxTokens: 0, contextWindow: 0, reasoningEffort: 'max', supportsVision: false },
         ],
         activeProfileId: 'a',
       },
@@ -197,5 +202,69 @@ describe('新结构', () => {
     expect(s.profiles[0]?.reasoningEffort).toBe('xhigh');
     expect(s.profiles[1]?.reasoningEffort).toBe('');
     expect(s.profiles[2]?.reasoningEffort).toBe('max');
+  });
+
+  it('★★ 服务商下多模型预设（models）完整读写与切换往返', async () => {
+    const s = await loadSettings();
+    const configured = {
+      ...s,
+      profiles: [
+        {
+          id: 'siliconflow-main',
+          name: '硅基流动',
+          provider: 'siliconflow' as const,
+          baseURL: 'https://api.siliconflow.cn/v1',
+          apiKey: 'sk-test',
+          model: 'deepseek-ai/DeepSeek-V3',
+          temperature: 0.3,
+          maxTokens: 4096,
+          contextWindow: 65536,
+          reasoningEffort: '' as const,
+          supportsVision: false,
+          models: [
+            {
+              id: 'm1',
+              name: 'DeepSeek V3 (日常/64k)',
+              model: 'deepseek-ai/DeepSeek-V3',
+              contextWindow: 65536,
+              maxTokens: 4096,
+              temperature: 0.3,
+              reasoningEffort: '' as const,
+              supportsVision: false,
+            },
+            {
+              id: 'm2',
+              name: 'Qwen 2.5 72B (超长/128k)',
+              model: 'Qwen/Qwen2.5-72B-Instruct',
+              contextWindow: 131072,
+              maxTokens: 8192,
+              temperature: 0.2,
+              reasoningEffort: '' as const,
+              supportsVision: false,
+            },
+            {
+              id: 'm3',
+              name: 'Qwen VL (多模态识图)',
+              model: 'Qwen/Qwen2-VL-72B-Instruct',
+              contextWindow: 32768,
+              maxTokens: 2048,
+              temperature: 0.3,
+              reasoningEffort: '' as const,
+              supportsVision: true,
+            },
+          ],
+        },
+      ],
+      activeProfileId: 'siliconflow-main',
+    };
+
+    await saveSettings(configured);
+
+    const reloaded = await loadSettings();
+    const prof = getActiveProfile(reloaded);
+    expect(prof?.models).toHaveLength(3);
+    expect(prof?.models?.[1]?.model).toBe('Qwen/Qwen2.5-72B-Instruct');
+    expect(prof?.models?.[1]?.contextWindow).toBe(131072);
+    expect(prof?.models?.[2]?.supportsVision).toBe(true);
   });
 });

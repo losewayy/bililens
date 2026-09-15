@@ -455,3 +455,38 @@ export async function fetchNavStatus(): Promise<NavStatus> {
     vip: j.data?.vipStatus === 1,
   };
 }
+
+/**
+ * 获取纯音频流直链（DASH 格式中的低码率音轨）
+ * 仅用于无官方字幕时提交给本地 ASR 转录服务兜底
+ */
+export async function fetchAudioStreamUrl(p: {
+  aid: number;
+  bvid: string;
+  cid: number;
+}): Promise<string | null> {
+  try {
+    const j = await signedGet<{
+      dash?: {
+        audio?: Array<{ id?: number; baseUrl?: string; base_url?: string }>;
+      };
+    }>('/x/player/wbi/playurl', {
+      avid: p.aid,
+      bvid: p.bvid,
+      cid: p.cid,
+      fnval: 16,
+      fnver: 0,
+      fourk: 0,
+    });
+
+    if (j.code !== 0 || !j.data?.dash?.audio?.length) {
+      return null;
+    }
+
+    const audios = j.data.dash.audio;
+    const stream = audios[0]?.baseUrl || audios[0]?.base_url;
+    return stream ? normalizeSubtitleUrl(stream) : null;
+  } catch {
+    return null;
+  }
+}

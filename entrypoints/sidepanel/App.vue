@@ -373,15 +373,36 @@ watch(
         <div v-show="tab === 'note'" class="tab-pane tab-pane--note">
           <!-- 正在生成状态条 -->
           <div v-if="isBusy" class="note-generating-bar">
+            <div class="note-generating-progress-rail">
+              <div
+                class="note-generating-progress-bar"
+                :class="{ 'is-determinate': typeof state.progressPercent === 'number' }"
+                :style="typeof state.progressPercent === 'number' ? { width: Math.min(100, Math.max(2, state.progressPercent)) + '%' } : {}"
+              />
+            </div>
             <span class="spinner" />
             <span class="note-generating-status">{{ state.status || '正在生成精读笔记…' }}</span>
           </div>
 
           <!-- 错误 -->
           <div v-if="state.phase === 'error'" class="notice notice--error">
-            <p class="notice__title">没能完成</p>
+            <p class="notice__title">{{ state.errorTitle || '任务未能完成' }}</p>
             <p class="notice__body notice__body--wrap">{{ state.error }}</p>
-            <button class="btn" @click="startNote">重试</button>
+            <div class="notice__actions">
+              <button
+                v-if="
+                  state.errorCategory === 'model_not_configured' ||
+                  state.errorCategory === 'provider_error' ||
+                  state.errorCategory === 'asr_not_started' ||
+                  state.errorCategory === 'no_subtitle'
+                "
+                class="btn btn--primary"
+                @click="openOptions"
+              >
+                前往设置
+              </button>
+              <button class="btn" @click="startNote">重试</button>
+            </div>
           </div>
 
           <!-- 正文（含时间轴导轨） -->
@@ -637,6 +658,13 @@ watch(
   background: var(--err-wash);
 }
 
+.notice__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 /* ---------------- 占位 ---------------- */
 
 .placeholder {
@@ -684,15 +712,50 @@ watch(
 /* ---------------- 正在生成状态条 ---------------- */
 
 .note-generating-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 9px 14px;
   background: var(--bili-wash);
   border-bottom: 1px solid var(--bili-line);
   color: var(--bili);
   font-size: calc(12px * var(--fs));
   font-weight: 550;
+  overflow: hidden;
+}
+
+.note-generating-progress-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(251, 114, 153, 0.16);
+  overflow: hidden;
+}
+
+.note-generating-progress-bar {
+  width: 45%;
+  height: 100%;
+  background: var(--bili);
+  border-radius: 2px;
+  animation: progress-slide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.note-generating-progress-bar.is-determinate {
+  animation: none;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px rgba(251, 114, 153, 0.5);
+}
+
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
 }
 
 .note-generating-status {

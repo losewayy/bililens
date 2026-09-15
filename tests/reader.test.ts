@@ -616,3 +616,45 @@ describe('视频元信息预取', () => {
     expect(collectCalls).toBe(0);
   });
 });
+
+/* ================================================================== *
+ * 七、错误分类与用户引导体系
+ * ================================================================== */
+
+describe('错误细分与引导策略', () => {
+  it('★ 未配置大模型或模型为空时，精准提示「大模型未配置」且分类为 model_not_configured', async () => {
+    const reader = await boot();
+    const emptySettings = settings({}, { baseURL: '', model: '' });
+    await reader.runNote(emptySettings);
+
+    expect(reader.state.value.phase).toBe('error');
+    expect(reader.state.value.errorCategory).toBe('model_not_configured');
+    expect(reader.state.value.errorTitle).toBe('大模型未配置');
+    expect(reader.state.value.error).toContain('尚未配置大模型');
+  });
+
+  it('★ 云端服务商未填 API Key 时，精准提示「未配置 API Key」', async () => {
+    const reader = await boot();
+    const cloudSettings = settings({}, {
+      provider: 'deepseek',
+      baseURL: 'https://api.deepseek.com/v1',
+      model: 'deepseek-chat',
+      apiKey: '',
+    });
+    await reader.runNote(cloudSettings);
+
+    expect(reader.state.value.phase).toBe('error');
+    expect(reader.state.value.errorCategory).toBe('model_not_configured');
+    expect(reader.state.value.errorTitle).toBe('未配置 API Key');
+    expect(reader.state.value.error).toContain('尚未配置 API Key');
+  });
+
+  it('★ 聊天提问时若大模型未配置，助手气泡明确给出【大模型未配置】前缀', async () => {
+    const reader = await boot();
+    const emptySettings = settings({}, { baseURL: '', model: '' });
+    await reader.sendChat(emptySettings, '你好');
+
+    expect(reader.chat.value).toHaveLength(2);
+    expect(reader.chat.value[1]?.error).toContain('【大模型未配置】');
+  });
+});

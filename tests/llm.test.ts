@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildNoteMessages, buildMaterial, formatTranscript } from '@/lib/llm';
+import { buildNoteMessages, buildMaterial, formatTranscript, calculateTranscriptBudget } from '@/lib/llm';
 import { fmtTime } from '@/lib/time';
 
 describe('formatTranscript', () => {
@@ -179,5 +179,49 @@ describe('buildMessages', () => {
     const material = buildMaterial(payload);
     // 笔记的消息里必须原样包含这份素材
     expect(buildNoteMessages(payload)[1]?.content).toContain(material);
+  });
+
+  it('★ 依据 contextWindow 与 maxTokens 动态计算字幕字数预算', () => {
+    // 0 或未设置：安全基线回退
+    expect(calculateTranscriptBudget(0, 0)).toBe(90_000);
+    expect(calculateTranscriptBudget(undefined, undefined)).toBe(90_000);
+
+    // 16k 窗口（16384 token），maxTokens = 4096：
+    // (16384 - 3000 - 4096) * 1.3 = 9288 * 1.3 ≈ 12074
+    const b16k = calculateTranscriptBudget(16384, 4096);
+    expect(b16k).toBeGreaterThan(11_000);
+    expect(b16k).toBeLessThan(13_000);
+
+    // 极小窗口时保底 6,000 字，避免过度压缩导致完全无法阅读
+    const bTiny = calculateTranscriptBudget(2048, 2048);
+    expect(bTiny).toBe(6_000);
+
+    // 128k 超大窗口（131072 token）：
+    // 动态预算大幅扩容
+    const b128k = calculateTranscriptBudget(131072, 4096);
+    expect(b128k).toBeGreaterThan(150_000);
+  });
+
+  it('★ buildNoteMessages 透传 contextWindow 选项自适应压缩字幕', () => {
+    const hugeSubtitles = Array.from({ length: 3000 }, (_, i) => ({
+      from: i * 2,
+      content: `这是第 ${i} 句超长测试转录文字，用于验证动态窗口裁剪生效。`,
+    }));
+
+    // 传入 16k 窗口限制：应触发等距抽样压缩
+    const msgs16k = buildNoteMessages(
+      { info, subtitle: hugeSubtitles },
+      { contextWindow: 16384, maxTokens: 4096 },
+    );
+    const content16k = msgs16k[1]?.content ?? '';
+    expect(content16k).toContain('已按等距抽样压缩');
+
+    // 传入 1M 超大窗口：字幕完全无需压缩，全量保留
+    const msgs1M = buildNoteMessages(
+      { info, subtitle: hugeSubtitles },
+      { contextWindow: 1048576, maxTokens: 4096 },
+    );
+    const content1M = msgs1M[1]?.content ?? '';
+    expect(content1M).not.toContain('已按等距抽样压缩');
   });
 });

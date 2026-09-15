@@ -304,6 +304,11 @@ button {
   font-feature-settings: 'tnum' 1;
 }
 
+/* 时间轴与刻度字号倍率联动 */
+.rail__time {
+  font-size: calc(11px * var(--fs));
+}
+
 /* --- 滚动条：细，不抢视线 --- */
 ::-webkit-scrollbar {
   width: 9px;

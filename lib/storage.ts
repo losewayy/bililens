@@ -12,6 +12,7 @@ import {
   newProfileId,
   type LlmProfile,
   type ReasoningEffort,
+  type SavedModelConfig,
   type Settings,
 } from './types';
 import { hostPatternFromBaseURL, normalizeBaseURL } from './llm';
@@ -26,6 +27,24 @@ function normalizeEffort(raw: unknown): ReasoningEffort {
     : '';
 }
 
+/** 规范化单条保存的模型配置 */
+export function normalizeSavedModel(raw: unknown): SavedModelConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const m = raw as Partial<SavedModelConfig>;
+  const model = String(m.model ?? '').trim();
+  if (!model) return null;
+  return {
+    id: typeof m.id === 'string' && m.id ? m.id : newProfileId(),
+    model,
+    name: typeof m.name === 'string' && m.name ? m.name : model,
+    contextWindow: typeof m.contextWindow === 'number' && m.contextWindow > 0 ? m.contextWindow : 0,
+    maxTokens: typeof m.maxTokens === 'number' && m.maxTokens > 0 ? m.maxTokens : 0,
+    temperature: typeof m.temperature === 'number' ? m.temperature : 0.3,
+    reasoningEffort: normalizeEffort(m.reasoningEffort),
+    supportsVision: m.supportsVision === true,
+  };
+}
+
 /**
  * 规范化一份模型配置：补齐字段 + 规范化 baseURL。
  *
@@ -34,17 +53,47 @@ function normalizeEffort(raw: unknown): ReasoningEffort {
  */
 function normalizeProfile(raw: unknown): LlmProfile {
   const p = (raw ?? {}) as Partial<LlmProfile>;
+  const rawModel = String(p.model ?? '');
+  const rawContextWindow = typeof p.contextWindow === 'number' && p.contextWindow > 0 ? p.contextWindow : 0;
+  const rawMaxTokens = typeof p.maxTokens === 'number' && p.maxTokens > 0 ? p.maxTokens : 0;
+  const rawTemperature = typeof p.temperature === 'number' ? p.temperature : 0.3;
+  const rawReasoning = normalizeEffort(p.reasoningEffort);
+  const rawVision = p.supportsVision === true;
+
+  const rawModels = Array.isArray(p.models)
+    ? p.models.map(normalizeSavedModel).filter((m): m is SavedModelConfig => m !== null)
+    : [];
+
+  // 如果 models 数组为空但当前配置有 model，自动沉淀为第一份模型预设
+  let models = rawModels;
+  if (models.length === 0 && rawModel.trim()) {
+    models = [
+      {
+        id: newProfileId(),
+        model: rawModel.trim(),
+        name: rawModel.trim(),
+        contextWindow: rawContextWindow,
+        maxTokens: rawMaxTokens,
+        temperature: rawTemperature,
+        reasoningEffort: rawReasoning,
+        supportsVision: rawVision,
+      },
+    ];
+  }
+
   return {
     id: typeof p.id === 'string' && p.id ? p.id : newProfileId(),
     name: typeof p.name === 'string' && p.name ? p.name : (p.provider ?? '自定义端点'),
     provider: p.provider ?? 'custom',
     baseURL: normalizeBaseURL(String(p.baseURL ?? '')),
     apiKey: String(p.apiKey ?? ''),
-    model: String(p.model ?? ''),
-    temperature: typeof p.temperature === 'number' ? p.temperature : 0.3,
-    maxTokens: typeof p.maxTokens === 'number' ? p.maxTokens : 0,
-    reasoningEffort: normalizeEffort(p.reasoningEffort),
-    supportsVision: p.supportsVision === true,
+    model: rawModel,
+    temperature: rawTemperature,
+    maxTokens: rawMaxTokens,
+    contextWindow: rawContextWindow,
+    reasoningEffort: rawReasoning,
+    supportsVision: rawVision,
+    models,
   };
 }
 
@@ -90,6 +139,24 @@ function mergeSettings(partial: unknown): Settings {
     // 旧版本没有这个字段，手工改坏过也要收敛到合法档位
     fontScale: normalizeFontScale(p.fontScale),
     obsidian: { ...DEFAULT_SETTINGS.obsidian, ...(p.obsidian ?? {}) },
+    localAsr: {
+      enabled:
+        typeof p.localAsr?.enabled === 'boolean'
+          ? p.localAsr.enabled
+          : DEFAULT_SETTINGS.localAsr.enabled,
+      endpoint:
+        typeof p.localAsr?.endpoint === 'string' && p.localAsr.endpoint.trim()
+          ? p.localAsr.endpoint.trim()
+          : DEFAULT_SETTINGS.localAsr.endpoint,
+      timeoutSeconds:
+        typeof p.localAsr?.timeoutSeconds === 'number' && p.localAsr.timeoutSeconds > 0
+          ? p.localAsr.timeoutSeconds
+          : DEFAULT_SETTINGS.localAsr.timeoutSeconds,
+      autoFallback:
+        typeof p.localAsr?.autoFallback === 'boolean'
+          ? p.localAsr.autoFallback
+          : DEFAULT_SETTINGS.localAsr.autoFallback,
+    },
   };
 }
 

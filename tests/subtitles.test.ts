@@ -45,8 +45,8 @@ describe('toVtt', () => {
 });
 
 describe('toTxt', () => {
-  it('★ 与材料里的 [mm:ss] 格式一致', () => {
+  it('★ 纯文本导出无时间戳，纯净文稿格式', () => {
     const txt = toTxt([seg(0, 5, '第一句'), seg(3961, 3965, '第二句')]);
-    expect(txt).toBe('[0:00] 第一句\n[1:06:01] 第二句');
+    expect(txt).toBe('第一句\n第二句');
   });
 });
