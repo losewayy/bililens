@@ -3,9 +3,7 @@ __pycache__/
 *.pyc
 .cache/
 outputs/
-models/*.onnx
-models/*.gguf
-models/Fun-ASR-Nano-GGUF/*.onnx
-models/Fun-ASR-Nano-GGUF/*.gguf
+models/*
+!models/.gitkeep
 *.log
 *.zip

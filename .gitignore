@@ -14,9 +14,6 @@ coverage
 server/venv/
 server/.cache/
 server/outputs/
-server/models/*.onnx
-server/models/*.gguf
-server/models/*/*.onnx
-server/models/*/*.gguf
-*.zip
+server/models/*
 !server/models/.gitkeep
+*.zip
