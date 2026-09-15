@@ -41,7 +41,7 @@ import {
   type ChatTurn,
 } from '@/lib/llm';
 import { fmtTokens } from '@/lib/time';
-import { requestAsrTranscription, AsrError } from '@/lib/asr';
+import { requestAsrTranscription, AsrError, getEndpointPort } from '@/lib/asr';
 import {
   chatTitleFromTurns,
   getCachedNote,
@@ -555,11 +555,12 @@ export function useReader() {
 
         if (materialErr instanceof AsrError) {
           if (materialErr.code === 'ASR_NOT_STARTED') {
+            const asrPort = getEndpointPort(settings.localAsr?.endpoint || '');
             patch({
               phase: 'error',
               errorCategory: 'asr_not_started',
               errorTitle: '本地 ASR 服务未开启',
-              error: `${materialErr.message}\n\n💡 操作指引：请在本地运行 start-server.ps1 启动服务（默认监听端口 18765），开启后再点击下方「重试」。`,
+              error: `${materialErr.message}\n\n💡 操作指引：请在本地运行 start-server.ps1 启动服务（确保 ${asrPort} 端口正常在线），开启后再点击下方「重试」。`,
               status: '',
             });
             return;
@@ -989,8 +990,9 @@ export function useReader() {
           }
         } else if (e instanceof AsrError) {
           if (e.code === 'ASR_NOT_STARTED') {
+            const asrPort = getEndpointPort(settings.localAsr?.endpoint || '');
             prefix = '【本地 ASR 服务未开启】';
-            tip = '\n💡 请运行 start-server.ps1 启动本地语音识别服务（18765 端口）。';
+            tip = `\n💡 请运行 start-server.ps1 启动本地语音识别服务（确保 ${asrPort} 端口正常在线）。`;
           } else {
             prefix = '【本地 ASR 转写异常】';
           }

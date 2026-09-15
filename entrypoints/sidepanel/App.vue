@@ -127,15 +127,15 @@ let playheadTimer: number | null = null;
 function startPlayheadWatch(): void {
   if (playheadTimer !== null) return;
   playheadTimer = window.setInterval(() => {
-    if (!settings.value?.sendPlayhead || tab.value !== 'chat') return;
+    // 只要有当前激活的 B站 Tab，就定期轮询播放进度，供笔记导轨与对话面板联动
     const tabId = reader.getTabId();
     if (tabId === null) return;
-    void askContent(tabId, 'playhead', undefined, 3000)
+    void askContent(tabId, 'playhead', undefined, 2000)
       .then((r) => {
         playhead.value = r.seconds;
       })
       .catch(() => undefined);
-  }, 3000);
+  }, 800);
 }
 
 /* ---------------------------------------------------------------- *
@@ -208,6 +208,7 @@ function onRemoveChat(id: string): void {
 }
 
 async function onSeek(seconds: number): Promise<void> {
+  playhead.value = seconds;
   const tabId = reader.getTabId();
   if (tabId === null) return;
   await seekVideo(tabId, seconds);
@@ -407,7 +408,12 @@ watch(
 
           <!-- 正文（含时间轴导轨） -->
           <div v-if="state.markdown" class="body">
-            <NoteBody :html="renderedHtml" :streaming="isStreaming" @seek="onSeek" />
+            <NoteBody
+              :html="renderedHtml"
+              :streaming="isStreaming"
+              :playhead="playhead"
+              @seek="onSeek"
+            />
           </div>
 
           <!-- 待生成 -->

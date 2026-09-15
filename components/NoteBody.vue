@@ -22,47 +22,130 @@
  * 安全说明：html 来自 lib/markdown.ts，该模块采用
  * 「先转义原文、再插入自有标签」的策略，模型输出里的标签只会显示为纯文本。
  */
-import { onUnmounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps<{
   html: string;
   /** 生成中：末尾显示脉冲光标 */
   streaming?: boolean;
+  /** 视频当前播放时间（秒），用于导轨与实际播放进度联动 */
+  playhead?: number | null;
 }>();
 
 const emit = defineEmits<{ seek: [seconds: number] }>();
 
 const root = ref<HTMLElement | null>(null);
+const spineTop = ref('0px');
+const spineHeight = ref('0px');
 const fillHeight = ref('0px');
 let observer: IntersectionObserver | null = null;
 
 /** 记录各章节的可见状态 */
 const visible = new Set<string>();
 
-function updateChapterStates(currentId: string | undefined): void {
+interface ChapterItem {
+  el: HTMLElement;
+  id: string;
+  sec: number;
+}
+
+function getChapterItems(): ChapterItem[] {
+  const el = root.value;
+  if (!el) return [];
+  const heads = Array.from(el.querySelectorAll<HTMLElement>('h3.rail'));
+  return heads.map((h) => {
+    const btn = h.querySelector<HTMLElement>('[data-seek]');
+    const raw = btn?.dataset['seek'];
+    const sec = raw !== undefined ? Number(raw) : NaN;
+    return { el: h, id: h.id, sec: Number.isFinite(sec) ? sec : 0 };
+  });
+}
+
+function updateChapterStates(currentId?: string): void {
   const el = root.value;
   if (!el) return;
-  const heads = Array.from(el.querySelectorAll<HTMLElement>('h3.rail'));
+  const chapters = getChapterItems();
+  if (chapters.length === 0) {
+    spineTop.value = '0px';
+    spineHeight.value = '0px';
+    fillHeight.value = '0px';
+    return;
+  }
+
+  const firstChapter = chapters[0];
+  const lastChapter = chapters[chapters.length - 1];
+  if (!firstChapter || !lastChapter) {
+    spineTop.value = '0px';
+    spineHeight.value = '0px';
+    fillHeight.value = '0px';
+    return;
+  }
+
+  const startY = firstChapter.el.offsetTop + firstChapter.el.offsetHeight / 2;
+  const endY = lastChapter.el.offsetTop + lastChapter.el.offsetHeight / 2;
+  spineTop.value = `${Math.round(startY)}px`;
+  spineHeight.value = `${Math.max(0, Math.round(endY - startY))}px`;
+
+  // 1. 若外部传入了有效的 playhead，优先根据视频实际播放进度匹配激活章节
+  let activeId = currentId;
+  const hasPlayhead =
+    typeof props.playhead === 'number' &&
+    Number.isFinite(props.playhead) &&
+    props.playhead >= 0;
+
+  if (hasPlayhead) {
+    const ph = props.playhead as number;
+    let matched = firstChapter;
+    for (const c of chapters) {
+      if (c.sec <= ph) {
+        matched = c;
+      } else {
+        break;
+      }
+    }
+    activeId = matched.id;
+  } else if (!activeId) {
+    activeId = firstChapter.id;
+  }
+
+  // 2. 更新类名（is-active / is-visited）
   let found = false;
-  for (const h of heads) {
-    if (h.id === currentId) {
-      h.classList.add('is-active');
-      h.classList.remove('is-visited');
+  for (const c of chapters) {
+    if (c.id === activeId) {
+      c.el.classList.add('is-active');
+      c.el.classList.remove('is-visited');
       found = true;
-    } else if (!found && currentId) {
-      h.classList.remove('is-active');
-      h.classList.add('is-visited');
+    } else if (!found && activeId) {
+      c.el.classList.remove('is-active');
+      c.el.classList.add('is-visited');
     } else {
-      h.classList.remove('is-active');
-      h.classList.remove('is-visited');
+      c.el.classList.remove('is-active');
+      c.el.classList.remove('is-visited');
     }
   }
 
-  const active = el.querySelector<HTMLElement>('h3.rail.is-active');
-  if (active) {
-    const top = active.offsetTop;
-    const h = active.offsetHeight;
-    fillHeight.value = `${Math.max(0, top + h / 2)}px`;
+  // 3. 计算进度线填充高度 (fillHeight，从首个节点圆心延伸至当前播放进度)
+  const activeIdx = chapters.findIndex((c) => c.id === activeId);
+  const activeChapter = chapters[activeIdx];
+  if (activeChapter) {
+    const activeY = activeChapter.el.offsetTop + activeChapter.el.offsetHeight / 2;
+    const nextChapter = hasPlayhead ? chapters[activeIdx + 1] : undefined;
+
+    if (nextChapter && typeof props.playhead === 'number') {
+      const ph = props.playhead;
+      const curSec = activeChapter.sec;
+      const nextSec = nextChapter.sec;
+      const nextY = nextChapter.el.offsetTop + nextChapter.el.offsetHeight / 2;
+
+      let ratio = 0;
+      if (nextSec > curSec) {
+        ratio = Math.max(0, Math.min(1, (ph - curSec) / (nextSec - curSec)));
+      }
+      const currentY = activeY + ratio * (nextY - activeY);
+      fillHeight.value = `${Math.max(0, Math.round(currentY - startY))}px`;
+    } else {
+      fillHeight.value = `${Math.max(0, Math.round(activeY - startY))}px`;
+    }
   } else {
     fillHeight.value = '0px';
   }
@@ -79,6 +162,8 @@ function setupSpy(): void {
 
   const heads = Array.from(el.querySelectorAll<HTMLElement>('h3.rail'));
   if (heads.length === 0) {
+    spineTop.value = '0px';
+    spineHeight.value = '0px';
     fillHeight.value = '0px';
     return;
   }
@@ -93,9 +178,15 @@ function setupSpy(): void {
         else visible.delete(id);
       }
 
-      // 取文档顺序中最靠前的可见章节作为「当前」
-      const current = order.find((id) => visible.has(id)) ?? order[0];
-      updateChapterStates(current);
+      // 未收到有效播放进度时，由视口阅读位置驱动高亮
+      const hasPlayhead =
+        typeof props.playhead === 'number' &&
+        Number.isFinite(props.playhead) &&
+        props.playhead >= 0;
+      if (!hasPlayhead) {
+        const current = order.find((id) => visible.has(id)) ?? order[0];
+        updateChapterStates(current);
+      }
     },
     {
       // 顶部让开 sticky 顶栏；底部收窄，使高亮偏向「刚开始读」的那一节
@@ -108,6 +199,16 @@ function setupSpy(): void {
   // 初始化默认状态
   updateChapterStates(order[0]);
 }
+
+/*
+ * 监听播放时间变化，实时驱动章节高亮与导轨进度
+ */
+watch(
+  () => props.playhead,
+  () => {
+    updateChapterStates();
+  },
+);
 
 /*
  * 只在章节结构变化时重建观察器。
@@ -126,7 +227,16 @@ watch(
   { immediate: true, flush: 'post' },
 );
 
+function onResize(): void {
+  updateChapterStates();
+}
+
+onMounted(() => {
+  window.addEventListener('resize', onResize);
+});
+
 onUnmounted(() => {
+  window.removeEventListener('resize', onResize);
   observer?.disconnect();
   observer = null;
 });
@@ -157,7 +267,8 @@ function onClick(ev: MouseEvent): void {
 
 <template>
   <article ref="root" class="note" :class="{ 'note--streaming': props.streaming }" @click="onClick">
-    <div class="timeline-spine-fill" :style="{ height: fillHeight }" aria-hidden="true" />
+    <div class="timeline-spine" :style="{ top: spineTop, height: spineHeight }" aria-hidden="true" />
+    <div class="timeline-spine-fill" :style="{ top: spineTop, height: fillHeight }" aria-hidden="true" />
     <!-- eslint-disable-next-line vue/no-v-html -- 内容已在 markdown.ts 中做过转义 -->
     <div class="note__inner md" v-html="props.html" />
     <span v-if="props.streaming" class="caret" aria-hidden="true" />
@@ -180,31 +291,28 @@ function onClick(ev: MouseEvent): void {
   word-break: break-word;
 }
 
-/* 贯穿式精密中轴轨道：微凹沉静槽 */
-.note::before {
-  content: '';
+/* 贯穿式精密中轴导轨：始于首个章节节点圆心，终于末尾章节节点圆心，绝不穿透核心摘要卡片 */
+.timeline-spine {
   position: absolute;
   left: 11px;
-  top: 12px;
-  bottom: 16px;
   width: 2px;
   border-radius: 1px;
   background: var(--rail-spine, var(--line));
   pointer-events: none;
   z-index: 0;
+  transition: top 240ms var(--ease), height 240ms var(--ease);
 }
 
-/* 动态填充的平滑进度线：自顶部延伸至当前激活节点中心 */
+/* 动态填充的平滑进度线：自首个章节节点延伸至当前播放/阅读位置 */
 .timeline-spine-fill {
   position: absolute;
   left: 11px;
-  top: 12px;
   width: 2px;
   border-radius: 1px;
   background: linear-gradient(180deg, var(--bili) 0%, var(--rail-filled, rgba(251, 114, 153, 0.75)) 100%);
   pointer-events: none;
   z-index: 1;
-  transition: height 240ms var(--ease);
+  transition: top 240ms var(--ease), height 240ms var(--ease);
 }
 
 .note__inner {

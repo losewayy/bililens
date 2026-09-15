@@ -7,7 +7,18 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkAsrHealth, requestAsrTranscription } from '@/lib/asr';
+import { checkAsrHealth, getEndpointPort, requestAsrTranscription } from '@/lib/asr';
+
+describe('getEndpointPort', () => {
+  it('正确解析各种格式端点的端口', () => {
+    expect(getEndpointPort('http://127.0.0.1:18765/api/transcribe')).toBe('18765');
+    expect(getEndpointPort('http://localhost:8765/api/transcribe')).toBe('8765');
+    expect(getEndpointPort('http://192.168.1.50:9000')).toBe('9000');
+    expect(getEndpointPort('http://example.com/api')).toBe('80');
+    expect(getEndpointPort('https://example.com/api')).toBe('443');
+    expect(getEndpointPort('invalid-url', '18765')).toBe('18765');
+  });
+});
 
 describe('checkAsrHealth', () => {
   const originalFetch = globalThis.fetch;
@@ -194,5 +205,13 @@ describe('requestAsrTranscription', () => {
     await expect(
       requestAsrTranscription('http://127.0.0.1:18765/api/transcribe', { bvid: 'BV1xx411c7mD' }),
     ).rejects.toThrow('未获取到可用的视频音轨流');
+  });
+
+  it('连接被拒时抛出友好错误并包含动态端口信息', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('Failed to fetch'));
+
+    await expect(
+      requestAsrTranscription('http://127.0.0.1:9876/api/transcribe', { bvid: 'BV1xx411c7mD' }),
+    ).rejects.toThrow('确保 9876 端口正常在线');
   });
 });

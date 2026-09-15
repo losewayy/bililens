@@ -126,6 +126,38 @@ describe('旧设置迁移', () => {
     expect(s.activeProfileId).toBe('');
     expect(s.obsidian.subfolder).toBe(DEFAULT_SETTINGS.obsidian.subfolder);
   });
+
+  it('★ 旧默认 ASR 端口 8765 自动迁移为 18765', async () => {
+    store = {
+      'settings.v1': {
+        ...DEFAULT_SETTINGS,
+        localAsr: {
+          enabled: true,
+          endpoint: 'http://127.0.0.1:8765/api/transcribe',
+          timeoutSeconds: 180,
+          autoFallback: true,
+        },
+      },
+    };
+    const s = await loadSettings();
+    expect(s.localAsr.endpoint).toBe('http://127.0.0.1:18765/api/transcribe');
+  });
+
+  it('★ 用户自定义的非默认 ASR 端口保持原样不被误改', async () => {
+    store = {
+      'settings.v1': {
+        ...DEFAULT_SETTINGS,
+        localAsr: {
+          enabled: true,
+          endpoint: 'http://192.168.1.100:9999/api/transcribe',
+          timeoutSeconds: 240,
+          autoFallback: true,
+        },
+      },
+    };
+    const s = await loadSettings();
+    expect(s.localAsr.endpoint).toBe('http://192.168.1.100:9999/api/transcribe');
+  });
 });
 
 describe('新结构', () => {

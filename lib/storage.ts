@@ -144,10 +144,20 @@ function mergeSettings(partial: unknown): Settings {
         typeof p.localAsr?.enabled === 'boolean'
           ? p.localAsr.enabled
           : DEFAULT_SETTINGS.localAsr.enabled,
-      endpoint:
-        typeof p.localAsr?.endpoint === 'string' && p.localAsr.endpoint.trim()
-          ? p.localAsr.endpoint.trim()
-          : DEFAULT_SETTINGS.localAsr.endpoint,
+      endpoint: (() => {
+        const ep =
+          typeof p.localAsr?.endpoint === 'string' && p.localAsr.endpoint.trim()
+            ? p.localAsr.endpoint.trim()
+            : DEFAULT_SETTINGS.localAsr.endpoint;
+        // 兼容迁移：旧版本历史默认端口曾为 8765，现已全面统一升级为五位数独立端口 18765
+        if (
+          ep === 'http://127.0.0.1:8765/api/transcribe' ||
+          ep === 'http://localhost:8765/api/transcribe'
+        ) {
+          return DEFAULT_SETTINGS.localAsr.endpoint;
+        }
+        return ep;
+      })(),
       timeoutSeconds:
         typeof p.localAsr?.timeoutSeconds === 'number' && p.localAsr.timeoutSeconds > 0
           ? p.localAsr.timeoutSeconds

@@ -38,6 +38,18 @@ export class AsrError extends Error {
   }
 }
 
+/**
+ * 从 ASR 端点安全提取端口号，用于动态错误提示（防止文案端口与实际请求端点不一致）
+ */
+export function getEndpointPort(endpoint: string, defaultPort = '18765'): string {
+  try {
+    const url = new URL(endpoint);
+    return url.port || (url.protocol === 'https:' ? '443' : '80');
+  } catch {
+    return defaultPort;
+  }
+}
+
 /** 探测本地 ASR 服务健康状态 */
 export async function checkAsrHealth(
   endpoint: string,
@@ -56,9 +68,10 @@ export async function checkAsrHealth(
     return { ok: false, message: `服务响应异常 (${res.status})` };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    const port = getEndpointPort(endpoint);
     const friendly =
       /Failed to fetch|NetworkError|Load failed|ERR_CONNECTION_REFUSED/i.test(detail)
-        ? 'Failed to fetch (无法连接本地 ASR 服务，请确认已运行 start-server.ps1 启动服务，默认端口 18765)'
+        ? `Failed to fetch (无法连接本地 ASR 服务，请确认已运行 start-server.ps1 启动服务，确保 ${port} 端口在线)`
         : detail;
     return {
       ok: false,
@@ -212,9 +225,10 @@ export async function requestAsrTranscription(
       );
     }
     const msg = err instanceof Error ? err.message : String(err);
+    const port = getEndpointPort(endpoint);
     if (/Failed to fetch|NetworkError|Load failed|ERR_CONNECTION_REFUSED/i.test(msg)) {
       throw new AsrError(
-        `无法连接本地 ASR 服务（${endpoint}）。本地服务未开启，请先运行本地 ASR 启动脚本（如 start-server.ps1，确保 18765 端口正常在线）后再试。`,
+        `无法连接本地 ASR 服务（${endpoint}）。本地服务未开启，请先运行本地 ASR 启动脚本（如 start-server.ps1，确保 ${port} 端口正常在线）后再试。`,
         'ASR_NOT_STARTED',
         undefined,
         msg,
