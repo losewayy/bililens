@@ -18,4 +18,5 @@ server/models/*.onnx
 server/models/*.gguf
 server/models/*/*.onnx
 server/models/*/*.gguf
+*.zip
 !server/models/.gitkeep
