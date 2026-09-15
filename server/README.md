@@ -68,3 +68,11 @@ python download_models.py
 - **转录接口**: `POST /api/transcribe`
   - 参数: `{ "bvid": "BV1xx411c7mD", "stream": true }`
   - 返回: NDJSON 流式进度事件与最终结构化字幕列表 `[{ from, to, content }]`。
+
+---
+
+## 鸣谢与致谢
+
+- **[CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline)**（[@HaujetZhao](https://github.com/HaujetZhao)）：非常出色的离线语音识别工具，本项目本地 ASR 的推理流水线与模型适配深受其启发。
+- **[FunASR](https://github.com/modelscope/FunASR)**：阿里巴巴通义实验室开源的 Fun-ASR-Nano 架构与基础模型。
+- **[llama.cpp](https://github.com/ggerganov/llama.cpp)**：提供底层的 GGUF 解码支持。

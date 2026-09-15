@@ -164,6 +164,17 @@ pnpm build
 
 ---
 
+## 鸣谢与致谢
+
+BiliLens 的开发与本地语音识别能力的落地离不开开源社区优秀项目的启发与基石贡献，特别致谢：
+
+- **[CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline)**（[@HaujetZhao](https://github.com/HaujetZhao)）：优秀的完全离线语音输入与长音频转写工具，本项目内置的本地 ASR 极速推理架构与 Fun-ASR-Nano 模型适配方案深受其设计理念与工程实践的启发和借鉴。
+- **[FunASR](https://github.com/modelscope/FunASR)**（阿里巴巴通义实验室）：开源先进的工业级语音基础模型与 Fun-ASR-Nano 架构。
+- **[llama.cpp](https://github.com/ggerganov/llama.cpp)**：高性能轻量化 C++ 推理引擎。
+- **[WXT](https://wxt.dev/)**：现代化下一代 Web 扩展开发框架。
+
+---
+
 ## 开源协议
 
 本项目基于 [MIT License](LICENSE) 协议开源。
