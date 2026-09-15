@@ -106,7 +106,7 @@ pnpm build
 ```powershell
 cd server
 
-# 1. 首次使用：拉取模型权重 (~942MB，自动从 ModelScope 高速下载)
+# 1. 首次使用：拉取定制模型权重 (~795MB 压缩包，自动高速拉取并解压)
 python download_models.py
 
 # 2. 启动服务 (Windows 用户可直接双击 start-server.bat)

@@ -39,14 +39,16 @@ pip install -r requirements.txt
 
 存放路径：`server/models/Fun-ASR-Nano-GGUF/`
 
+> **特别说明**：此模型并非阿里魔搭社区原生的 PyTorch 格式，而是由开源作者 [@HaujetZhao](https://github.com/HaujetZhao) 经过深度异构拆解与量化的 ONNX fp16 (Encoder/CTC) + GGUF q5_k (Decoder) 专属版本，请勿直接从官方魔搭搜索下载原生权重。
+
 #### 方式 A：自动化高速下载（推荐）
-直接运行随仓附带的下载脚本，将自动从 ModelScope（魔搭社区）高速拉取：
+直接运行随仓附带的下载脚本，将自动从发布源与加速节点拉取完整模型包并解压：
 ```bash
 python download_models.py
 ```
 
-#### 方式 B：GitHub Releases / 网盘手动解压
-前往 [GitHub Releases](https://github.com/losewayy/bililens/releases) 附件下载 `Fun-ASR-Nano-GGUF.zip`，解压至 `server/models/Fun-ASR-Nano-GGUF/` 目录下即可。
+#### 方式 B：GitHub Releases 手动下载
+前往 [GitHub Releases](https://github.com/losewayy/bililens/releases) 附件直接下载 `Fun-ASR-Nano-GGUF.zip` (~795MB)，解压至 `server/models/Fun-ASR-Nano-GGUF/` 目录下即可。
 
 ---
 
