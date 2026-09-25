@@ -4,6 +4,13 @@ BiliLens 是一款面向哔哩哔哩（Bilibili）的现代化浏览器扩展，
 
 通过与各大兼容 OpenAI 协议的大语言模型以及内置的本地极速 ASR 推理引擎深度协同，帮助用户在数分钟内把握长视频核心脉络，支持音视频精准点播跳转、多轮深度探讨及一键沉淀至个人知识库。
 
+<table>
+  <tr>
+    <td><img src="design/shots/note-rail-light.png" alt="结构化笔记与时间轴导轨" /></td>
+    <td><img src="design/shots/chat-light.png" alt="针对视频的多轮追问，回答带可点时间戳" /></td>
+  </tr>
+</table>
+
 ---
 
 ## 核心特性
