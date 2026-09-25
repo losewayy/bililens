@@ -1143,11 +1143,13 @@ defineExpose({ focus: () => input.value?.focus() });
   padding: 10px 14px 12px;
 }
 
-/* 快速跳转：浮在输入框上沿的右侧，不占布局空间 */
+/* 快速跳转：浮在输入框上沿的正中，不占布局空间。
+   不能放右侧——流式回复时那里是状态栏的「停止」按钮，会互相压住 */
 .jumpbar__btn {
   position: absolute;
-  right: 14px;
+  left: 50%;
   bottom: calc(100% + 8px);
+  transform: translateX(-50%);
   z-index: 20;
   display: grid;
   place-items: center;
@@ -1167,7 +1169,7 @@ defineExpose({ focus: () => input.value?.focus() });
 .jumpbar__btn:hover {
   border-color: var(--bili);
   color: var(--bili);
-  transform: scale(1.08);
+  transform: translateX(-50%) scale(1.08);
 }
 
 /* 待发送的缩略图 */

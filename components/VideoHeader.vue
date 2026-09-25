@@ -18,6 +18,8 @@ const props = defineProps<{
   conclusion: Conclusion | null;
   materialHint: string;
   subtitleCount: number;
+  /** 字幕轨探测结果：null = 探测中，0 = 确无轨，>0 = 有可用轨 */
+  trackCount: number | null;
   /** 字幕轨兜底来源：官方总结不可用时由面板传入（内部走素材缓存/采集） */
   getSubtitles?: () => Promise<SubtitleSegment[] | null>;
 }>();
@@ -29,19 +31,29 @@ const hasMaterial = computed(() => props.subtitleCount > 0);
 const officialCount = computed(() =>
   props.conclusion?.available ? props.conclusion.subtitle.length : 0,
 );
-const hasSubtitles = computed(() => officialCount.value > 0 || hasMaterial.value);
+/** 探测到有字幕轨（人工 CC 或 B站 AI 字幕都算）——还没下载正文 */
+const hasTracks = computed(() => (props.trackCount ?? 0) > 0);
+const hasSubtitles = computed(
+  () => officialCount.value > 0 || hasMaterial.value || hasTracks.value,
+);
 
 const statusText = computed(() => {
   if (hasOfficial.value && hasMaterial.value) return '官方总结 + 字幕已同步';
   if (hasOfficial.value) return '官方总结已同步';
   if (hasMaterial.value) return `字幕已同步 · ${props.subtitleCount} 条`;
+  if (hasTracks.value) return `检测到字幕轨 · ${props.trackCount} 条`;
   // 元信息还没回来（预取中/预取失败）——不下「无可用」的结论
   if (isPending.value) return '检测字幕资源…';
   return '无可用字幕';
 });
 
-const isStatusOk = computed(() => hasOfficial.value || hasMaterial.value);
-const isPending = computed(() => !props.conclusion && !hasMaterial.value);
+const isStatusOk = computed(
+  () => hasOfficial.value || hasMaterial.value || hasTracks.value,
+);
+/* 两个预取（官方总结 + 字幕轨）都落定才算探测完，任一未到都保持「检测中」 */
+const isPending = computed(
+  () => (!props.conclusion || props.trackCount === null) && !hasMaterial.value,
+);
 
 /* ---------------- 字幕下载 ---------------- */
 

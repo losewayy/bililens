@@ -400,10 +400,15 @@ interface RawSubtitleBody {
   body?: Array<{ from?: number; to?: number; content?: string }>;
 }
 
-/** 拉取字幕主体内容 */
+/**
+ * 拉取字幕主体内容。
+ *
+ * 字幕文件在 CDN（aisubtitle/i0.hdslb.com），靠 URL 里的 auth_key 鉴权，
+ * 不需要 Cookie。绝不能带 credentials：CDN 的 ACAO 是通配符 *，
+ * 按 CORS 规范带凭证的跨域请求会被浏览器整体拒掉（实测 ERR_FAILED）。
+ */
 export async function fetchSubtitleBody(url: string): Promise<SubtitleSegment[]> {
   const resp = await fetch(normalizeSubtitleUrl(url), {
-    credentials: 'include',
     headers: { Accept: 'application/json, text/plain, */*' },
   });
   if (!resp.ok) throw new Error(`字幕文件下载失败 HTTP ${resp.status}`);

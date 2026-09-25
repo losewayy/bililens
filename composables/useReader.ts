@@ -85,6 +85,11 @@ export interface ReaderState {
   info: VideoInfo | null;
   conclusion: Conclusion | null;
   subtitleCount: number;
+  /**
+   * 字幕轨探测结果：null = 还在探测/探测失败，0 = 确无轨，>0 = 有可用轨。
+   * 只代表「存在轨道」，不代表已下载正文——真正的条数以 subtitleCount 为准。
+   */
+  trackCount: number | null;
   subtitleSource: string;
   /** 笔记的 Markdown */
   markdown: string;
@@ -110,6 +115,7 @@ export function useReader() {
     info: null,
     conclusion: null,
     subtitleCount: 0,
+    trackCount: null,
     subtitleSource: '',
     markdown: '',
     error: '',
@@ -201,6 +207,7 @@ export function useReader() {
       markdown: '',
       conclusion: null,
       subtitleCount: 0,
+      trackCount: null,
       subtitleSource: '',
       status: '',
       error: '',
@@ -234,6 +241,7 @@ export function useReader() {
         markdown: '',
         conclusion: null,
         subtitleCount: 0,
+        trackCount: null,
         subtitleSource: '',
         error: '',
         errorTitle: '',
@@ -253,9 +261,11 @@ export function useReader() {
       chatController = null;
 
       /*
-       * 预取官方总结（元信息），让顶部状态与字幕下载按钮打开即准确——
-       * 否则 conclusion/subtitleCount 在用户第一次发起笔记或聊天之前
-       * 一直是空值，头部会误报「无可用字幕」。
+       * 预取官方总结 + 字幕轨列表（都是元信息），让顶部状态与字幕下载按钮
+       * 打开即准确——否则 conclusion/subtitleCount 在用户第一次发起笔记
+       * 或聊天之前一直是空值，头部会误报「无可用字幕」。
+       * 字幕轨必须单独探：有轨无总结的视频不在少数（AI 总结是另一套设施），
+       * 只看 conclusion 会把这类视频全部误报成无字幕。
        * 失败静默：后续动作触发的采集仍会拿到，界面不下错结论即可。
        */
       void askContent(
@@ -276,6 +286,21 @@ export function useReader() {
           });
         })
         .catch(() => undefined);
+
+      void askContent(
+        activeTabId,
+        'subtitleList',
+        { aid: info.aid, bvid: info.bvid, cid: info.cid, upMid: info.upMid },
+        15_000,
+      )
+        .then((res) => {
+          if (currentKey !== key) return;
+          patch({ trackCount: res.list.length });
+        })
+        // 探测失败按 0 处理：宁可误报「无可用」也不要让状态卡在「检测中」
+        .catch(() => {
+          if (currentKey === key) patch({ trackCount: 0 });
+        });
 
       // 笔记命中缓存则直接展示，省一次模型调用
       const cached = await getCachedNote(info.bvid, info.cid);
@@ -390,6 +415,7 @@ export function useReader() {
         }
 
         // 其次用字幕轨（人工字幕优先，其次 AI 字幕）
+        let trackErr: string | null = null;
         if (subtitles.list.length > 0) {
           statusCb?.('正在下载字幕…');
           const sorted = [...subtitles.list].sort((a, b) => (a.isAi ? 1 : 0) - (b.isAi ? 1 : 0));
@@ -407,14 +433,21 @@ export function useReader() {
                 materialCache = { key, data };
                 return data;
               }
-            } catch {
-              /* 换下一条字幕轨 */
+            } catch (e) {
+              // 失败要留痕：每条轨都失败时如果吞掉，对外只剩「无字幕」，
+              // 真正的故障（如 CDN 跨域拦截）就再也查不到了
+              trackErr = e instanceof Error ? e.message : String(e);
             }
           }
         }
 
         const hint =
-          subtitles.error ?? (conclusion.available ? '' : conclusion.reason) ?? '未知原因';
+          subtitles.error ??
+          (trackErr
+            ? `已找到 ${subtitles.list.length} 条字幕轨但全部下载失败：${trackErr}`
+            : null) ??
+          (conclusion.available ? '' : conclusion.reason) ??
+          '未知原因';
 
         // 兜底：若开启了本地 ASR，自动发起转写
         const currentSettings = await loadSettings();

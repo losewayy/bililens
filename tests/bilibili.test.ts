@@ -8,9 +8,10 @@
  *   · 字幕地址规范化
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   currentPageIndex,
+  fetchSubtitleBody,
   normalizeSubtitleUrl,
   parseVideoId,
   pickBestTrack,
@@ -202,5 +203,24 @@ describe('pickBestTrack', () => {
     const t = track('ai-zh', '中文（自动生成）', true);
     expect(t.isAi).toBe(true);
     expect(track('zh-CN', '中文', false).isAi).toBe(false);
+  });
+});
+
+describe('fetchSubtitleBody', () => {
+  it('★ 不得携带凭证：字幕 CDN 的 ACAO 是通配符 *，credentials:include 必被 CORS 拦截', async () => {
+    const inits: Array<RequestInit | undefined> = [];
+    const stub = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init) => {
+      inits.push(init);
+      return new Response(
+        JSON.stringify({ body: [{ from: 0, to: 1, content: '第一句' }] }),
+      );
+    });
+    try {
+      const segs = await fetchSubtitleBody('//aisubtitle.hdslb.com/bfs/ai_subtitle/x.json');
+      expect(segs).toEqual([{ from: 0, to: 1, content: '第一句' }]);
+      expect(inits[0]?.credentials ?? 'same-origin').not.toBe('include');
+    } finally {
+      stub.mockRestore();
+    }
   });
 });
