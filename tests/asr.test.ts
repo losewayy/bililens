@@ -1,7 +1,7 @@
 /**
  * tests/asr.test.ts —— 本地 ASR 服务客户端单元测试
  *
- * 验证对本地 ASR 接口（如 CapsWriter / Qwen3-ASR 本地服务）的探测与转录调用：
+ * 验证对本地 ASR 接口（如 CapsWriter / Fun-ASR 本地服务）的探测与转录调用：
  * 1. checkAsrHealth 正常在线、HTTP 错误与网络异常分支
  * 2. requestAsrTranscription 参数传递、结果校验、异常字段过滤与错误处理
  */

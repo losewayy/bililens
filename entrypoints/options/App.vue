@@ -695,7 +695,7 @@ const SECTIONS = [
   { id: 'sec-behavior', no: '02', title: '聊天', desc: '对话习惯与自动触发' },
   { id: 'sec-display', no: '03', title: '外观', desc: '侧边栏字号与排版样张' },
   { id: 'sec-output', no: '04', title: '保存位置', desc: 'Obsidian 库与下载模式' },
-  { id: 'sec-asr', no: '05', title: '语音识别', desc: '本地极速 Qwen3-ASR 兜底' },
+  { id: 'sec-asr', no: '05', title: '语音识别', desc: '本地极速 Fun-ASR 兜底' },
 ] as const;
 
 const activeSection = ref<string>('sec-model');
@@ -1561,7 +1561,7 @@ function sectionDone(id: string): boolean {
             <input v-model="settings.localAsr.enabled" type="checkbox" />
             <span class="toggle__box" />
             <div class="toggle__text">
-              <strong>开启本地 Qwen3-ASR 自动兜底</strong>
+              <strong>开启本地 Fun-ASR 自动兜底</strong>
               <em>
                 利用本地 RTX 显卡（支持 Q4_K 轻量化模型）离线转录生肉视频，杜绝云端额度消耗与隐私泄露。
               </em>

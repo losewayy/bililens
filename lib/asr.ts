@@ -2,7 +2,7 @@
  * lib/asr.ts —— 本地 ASR 语音识别服务客户端
  *
  * 当 B 站视频既没有官方 AI 总结又没有 CC 字幕轨时，
- * useReader 会调用此模块向本地部署的 ASR 服务（如 Qwen3-ASR / CapsWriter 引擎）
+ * useReader 会调用此模块向本地部署的 ASR 服务（如 Fun-ASR / CapsWriter 引擎）
  * 发送转写请求，并获取标准的 SubtitleSegment 结构。
  */
 
