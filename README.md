@@ -11,6 +11,10 @@ BiliLens 是一款面向哔哩哔哩（Bilibili）的现代化浏览器扩展，
   </tr>
 </table>
 
+<p align="center">
+  <img src="design/shots/options-full-light.png" alt="设置页：多配置档案、国内外服务商预设、Obsidian 导出、本地 ASR 联动" width="620" />
+</p>
+
 ---
 
 ## 核心特性
